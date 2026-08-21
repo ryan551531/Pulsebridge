@@ -1,0 +1,34 @@
+# Copying this file is optional. The web dashboard creates local_config.py.
+ERPNEXT_API_KEY = ''
+ERPNEXT_API_SECRET = ''
+ERPNEXT_URL = 'https://erp.example.com'
+ERPNEXT_VERSION = 15
+
+PULL_FREQUENCY = 15
+LOGS_DIRECTORY = 'logs'
+IMPORT_START_DATE = None
+IMPORT_END_DATE = None
+SYNC_DEVICE_TIME_WITH_PC = True
+AUTO_CORRECT_SINGLE_PUNCHES = True
+SINGLE_PUNCH_CORRECTION_BY_DEVICE = {}
+SINGLE_PUNCH_GRACE_BY_SHIFT = {
+    '10-6 Workday': 60,
+    '2-10 Workday': 60,
+    '6-2 Workday': 60,
+    '8-5 Workday': 120,
+}
+
+devices = []
+shift_type_device_mapping = []
+allowed_exceptions = [1, 2, 3]
+
+# Optional advanced shift-detection settings supported by the sync engine.
+DEVICE_DEFAULT_SHIFT = {}
+SHIFT_LOGIC = {}
+SHIFT_BOUNDARIES = {}
+AUTO_SHIFT_DETECTION_ENABLED = False
+AUTO_SHIFT_EXCLUDED_IPS = []
+AUTO_SHIFT_MAX_DISTANCE_MINUTES = 240
+AUTO_SHIFT_ALLOWED_BY_DEVICE = {}
+AUTO_CREATE_SHIFT_ASSIGNMENT = True
+AUTO_CREATED_SHIFT_ASSIGNMENT_PREFIX = 'AUTO-SYNC'
