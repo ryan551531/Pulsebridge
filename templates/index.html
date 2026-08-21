@@ -197,6 +197,10 @@
           <button class="button primary" id="syncAllClocksButton">Sync all device clocks</button>
         </div>
         <div class="clock-results" id="clockSyncResults" aria-live="polite"></div>
+        <div class="device-sync-toolbar">
+          <div><strong id="selectedDeviceCount">0 locations selected</strong><span>Choose only the locations you want to synchronize.</span></div>
+          <button class="button primary" id="syncSelectedDevicesButton" disabled>Sync selected locations</button>
+        </div>
         <div id="deviceEditor" class="device-editor"></div>
       </section>
 
@@ -258,6 +262,6 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/static/app.js?v=20260818-9" defer></script>
+  <script src="/static/app.js?v=20260821-1" defer></script>
 </body>
 </html>
