@@ -84,7 +84,7 @@ For a Debian/Ubuntu LXC, use the included `install-lxc.sh`. Complete copy-and-in
 For a Proxmox Community Scripts-style setup, paste this into the Proxmox host:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/ryan551531/pulsebridge-private/main/proxmox-host-install.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/ryan551531/Pulsebridge/main/proxmox-host-install.sh)"
 ```
 
 It creates and configures the LXC automatically. The public repository requires

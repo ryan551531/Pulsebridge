@@ -10,7 +10,7 @@ The source repository is public, so no GitHub password or access token is
 needed. Paste this command into the **Proxmox host shell**:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/ryan551531/pulsebridge-private/main/proxmox-host-install.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/ryan551531/Pulsebridge/main/proxmox-host-install.sh)"
 ```
 
 The installer intentionally excludes `local_config.py`, user databases, logs,

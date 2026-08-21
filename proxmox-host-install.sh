@@ -77,7 +77,7 @@ done
 
 SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
 if [[ ! -f "${SOURCE_DIR}/app.py" ]]; then
-  REPO_URL="${PULSEBRIDGE_REPO_URL:-https://github.com/ryan551531/pulsebridge-private.git}"
+  REPO_URL="${PULSEBRIDGE_REPO_URL:-https://github.com/ryan551531/Pulsebridge.git}"
   [[ "${REPO_URL}" =~ ^https:// ]] || die "Use an HTTPS repository URL."
   REPO_TOKEN="${PULSEBRIDGE_REPO_TOKEN:-}"
 
