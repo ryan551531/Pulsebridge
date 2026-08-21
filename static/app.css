@@ -329,6 +329,9 @@ tbody tr:last-child td { border-bottom: 0; }
 .row-actions { display: flex; gap: 8px; }
 .row-actions .button { min-height: 42px; padding: 0 13px; font-size: 11px; }
 .test-device { min-height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--green); background: transparent; font-size: 11px; font-weight: 800; }
+.sync-attendance { min-height: 42px; padding: 0 12px; border: 1px solid var(--green); border-radius: 8px; color: #fff; background: var(--green); font-size: 11px; font-weight: 800; }
+.sync-attendance:hover { background: #0b4934; }
+.sync-attendance:disabled { cursor: wait; opacity: .55; }
 .sync-device-time { min-height: 42px; padding: 0 12px; border: 1px solid #d4df54; border-radius: 8px; color: #46501d; background: var(--lime); font-size: 11px; font-weight: 800; }
 .sticky-save { margin-top: 18px; padding: 16px 18px; display: flex; justify-content: space-between; align-items: center; border-radius: 12px; color: var(--muted); background: #e7ebe5; font-size: 12px; }
 

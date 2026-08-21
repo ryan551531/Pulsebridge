@@ -178,7 +178,7 @@ function renderDashboard(data) {
           ? `<span class="health employees">${Number(device.employee_count).toLocaleString()} employees</span>`
           : `<span class="health ${device.last_pull ? "" : "waiting"}">${device.last_pull ? "Reporting" : "Waiting"}</span>`}
       </div></div>
-      <p>${escapeHtml(device.ip)}${device.shift ? ` · ${escapeHtml(device.shift)}` : ""}<small>${device.connectivity?.checked_at ? `Ping checked ${escapeHtml(formatDate(device.connectivity.checked_at))}` : "First ping check is starting…"}</small></p>
+      <p>${escapeHtml(device.ip)}${device.shift ? ` · ${escapeHtml(device.shift)}` : ""}<small>${device.connectivity?.checked_at ? `Port 4370 checked ${escapeHtml(formatDate(device.connectivity.checked_at))}` : "First connection check is starting…"}</small></p>
       <div class="card-stats"><span>LAST PULL<strong>${escapeHtml(formatDate(device.last_pull))}</strong></span><span>SUCCESS / FAILED<strong>${device.success_count} / ${device.failure_count}</strong></span></div>
     </article>`).join("");
 }
@@ -267,7 +267,7 @@ function deviceRow(device = {}, { isNew = false } = {}) {
     <div class="field"><label>Private IP address</label><input data-key="ip" value="${escapeAttr(device.ip || "")}" placeholder="192.168.1.201"></div>
     <div class="field"><label>ERPNext shift</label><input data-key="shift" value="${escapeAttr(device.shift || "")}" placeholder="Day Shift"></div>
     <div class="field"><label>Punch direction</label><select data-key="punch_direction"><option>AUTO</option><option>IN</option><option>OUT</option><option>NONE</option></select></div>
-    <div class="row-actions"><button class="save-device button primary" type="button">Save</button><button class="test-device" type="button">Test</button><button class="sync-device-time" type="button">Sync clock</button><button class="icon-button" type="button" aria-label="Remove device">×</button></div>`;
+    <div class="row-actions"><button class="save-device button primary" type="button">Save</button><button class="test-device" type="button">Test</button><button class="sync-attendance" type="button">Sync attendance</button><button class="sync-device-time" type="button">Sync clock</button><button class="icon-button" type="button" aria-label="Remove device">×</button></div>`;
   $("select", row).value = device.punch_direction || "AUTO";
   $(".save-device", row).addEventListener("click", async (event) => {
     const button = event.currentTarget;
@@ -300,6 +300,21 @@ function deviceRow(device = {}, { isNew = false } = {}) {
       showToast(result.message);
     } catch (error) { showToast(error.message, true); }
     finally { button.disabled = false; button.textContent = "Sync clock"; }
+  });
+  $(".sync-attendance", row).addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const deviceId = $('[data-key="device_id"]', row).value.trim();
+    if (!deviceId) { showToast("Save a device ID before synchronizing attendance.", true); return; }
+    button.disabled = true;
+    button.textContent = "Starting…";
+    try {
+      await saveAll();
+      const result = await api("/api/service/run-device", { method: "POST", body: JSON.stringify({ device_id: deviceId }) });
+      startSyncProgress();
+      showToast(result.message);
+      await loadState();
+    } catch (error) { showToast(error.message, true); }
+    finally { button.disabled = false; button.textContent = "Sync attendance"; }
   });
   return row;
 }
@@ -529,7 +544,11 @@ function renderSyncProgress() {
   const counts = `${Number(progress.uploaded || 0)} uploaded · ${Number(progress.skipped || 0)} already present/skipped · ${Number(progress.failed || 0)} failed`;
   const configuredDevices = state.config?.devices || [];
   const backendDevices = progress.devices && typeof progress.devices === "object" ? progress.devices : {};
-  const deviceRows = configuredDevices.map((device, index) => {
+  const progressDeviceIds = Object.keys(backendDevices);
+  const displayedDevices = progressDeviceIds.length && progressDeviceIds.length === total
+    ? progressDeviceIds.map((deviceId) => configuredDevices.find((item) => item.device_id === deviceId) || { device_id: deviceId })
+    : configuredDevices;
+  const deviceRows = displayedDevices.map((device, index) => {
     const saved = backendDevices[device.device_id] || {};
     let deviceState = saved.state || (displayCompleted ? "completed" : index < done ? "completed" : index === done && active ? "running" : "waiting");
     if (displayCompleted && ["waiting", "running"].includes(deviceState)) deviceState = Number(progress.failed || 0) ? "completed_with_errors" : "completed";
@@ -555,7 +574,7 @@ function renderSyncProgress() {
       state: deviceState,
       percent: estimate,
       html: `<div class="sync-device-row ${escapeAttr(deviceState.replaceAll("_", "-"))}">
-        <div class="sync-device-identity"><strong>${escapeHtml(displayName(device.device_id))}</strong><span>Device ${Number(saved.index || index + 1)} of ${total || configuredDevices.length}</span></div>
+        <div class="sync-device-identity"><strong>${escapeHtml(displayName(device.device_id))}</strong><span>Device ${Number(saved.index || index + 1)} of ${total || displayedDevices.length}</span></div>
         <div class="sync-device-date"><strong>${escapeHtml(dateLabel)}</strong><span>${escapeHtml(stateLabel)} · ${escapeHtml(deviceFrom)} through ${escapeHtml(deviceTo)}</span><div class="sync-device-bar"><i style="width:${estimate.toFixed(1)}%"></i></div></div>
         <div class="sync-device-stats"><b>${Math.round(estimate)}%</b>${processed}${recordsTotal ? ` / ${recordsTotal}` : ""} punches · ${Number(saved.failed || 0)} failed</div>
       </div>`,
@@ -577,7 +596,7 @@ function renderSyncProgress() {
   if (displayCompleted) {
     $("#syncProgressLabel").textContent = progress.state === "completed" ? `Sync ${from} to ${to} finished successfully` : `Sync ${from} to ${to} finished with errors`;
   } else if (starting) {
-    $("#syncProgressLabel").textContent = `Starting sync ${from} to ${to} · preparing device 1 of ${total || configuredDevices.length || "…"}`;
+    $("#syncProgressLabel").textContent = `Starting sync ${from} to ${to} · preparing device 1 of ${total || displayedDevices.length || "…"}`;
   } else {
     $("#syncProgressLabel").textContent = `Syncing ${from} to ${to} · ${runningDevice ? displayName(runningDevice.id) : `device ${Math.min(done + 1, total || 1)}`} ${runningDate ? `· ${runningDate}` : ""}`;
   }
