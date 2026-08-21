@@ -67,6 +67,18 @@ except (TypeError, ValueError, json.JSONDecodeError):
 TEMP_SHIFT_ASSIGNMENT_CACHE = set()
 PENDING_PUNCH_LOCK = threading.Lock()
 STATUS_LOCK = threading.RLock()
+EMPLOYEE_LOOKUP_CACHE = {}
+SHIFT_ASSIGNMENT_CACHE = {}
+ERP_CACHE_LOCK = threading.RLock()
+HTTP_LOCAL = threading.local()
+
+def _http_session():
+    session = getattr(HTTP_LOCAL, 'session', None)
+    if session is None:
+        session = requests.Session()
+        session.headers.update(_erp_headers())
+        HTTP_LOCAL.session = session
+    return session
 
 def _erp_headers():
     return {
@@ -76,7 +88,7 @@ def _erp_headers():
 
 def _erp_get(resource_path, params=None):
     url = f"{config.ERPNEXT_URL}{resource_path}"
-    response = requests.get(url, headers=_erp_headers(), params=params, timeout=30)
+    response = _http_session().get(url, params=params, timeout=30)
     response.raise_for_status()
     return response.json().get('data', [])
 
@@ -143,30 +155,43 @@ def _matches_any_window(dt, windows):
     return False
 
 def _get_employee_by_attendance_device_id(attendance_device_id):
+    cache_key = str(attendance_device_id)
+    with ERP_CACHE_LOCK:
+        if cache_key in EMPLOYEE_LOOKUP_CACHE:
+            return EMPLOYEE_LOOKUP_CACHE[cache_key]
     params = {
         'fields': json.dumps(['name', 'default_shift', 'attendance_device_id', 'company']),
         'filters': json.dumps([['attendance_device_id', '=', str(attendance_device_id)]]),
         'limit_page_length': 1
     }
     employees = _erp_get('/api/resource/Employee', params=params)
-    return employees[0] if employees else None
+    employee = employees[0] if employees else None
+    with ERP_CACHE_LOCK:
+        EMPLOYEE_LOOKUP_CACHE[cache_key] = employee
+    return employee
 
 def _get_active_shift_assignment(employee_name, punch_date):
-    params = {
-        'fields': json.dumps(['name', 'shift_type', 'start_date', 'end_date', 'status']),
-        'filters': json.dumps([
-            ['employee', '=', employee_name],
-            ['docstatus', '=', 1],
-            ['status', '=', 'Active'],
-            ['start_date', '<=', punch_date.strftime('%Y-%m-%d')]
-        ]),
-        'order_by': 'start_date desc',
-        'limit_page_length': 20
-    }
-    assignments = _erp_get('/api/resource/Shift Assignment', params=params)
+    with ERP_CACHE_LOCK:
+        assignments = SHIFT_ASSIGNMENT_CACHE.get(employee_name)
+    if assignments is None:
+        params = {
+            'fields': json.dumps(['name', 'shift_type', 'start_date', 'end_date', 'status']),
+            'filters': json.dumps([
+                ['employee', '=', employee_name],
+                ['docstatus', '=', 1],
+                ['status', '=', 'Active']
+            ]),
+            'order_by': 'start_date desc',
+            'limit_page_length': 1000
+        }
+        assignments = _erp_get('/api/resource/Shift Assignment', params=params)
+        with ERP_CACHE_LOCK:
+            SHIFT_ASSIGNMENT_CACHE[employee_name] = assignments
+    punch_date_str = punch_date.strftime('%Y-%m-%d')
     for assignment in assignments:
+        start_date = assignment.get('start_date')
         end_date = assignment.get('end_date')
-        if not end_date or end_date >= punch_date.strftime('%Y-%m-%d'):
+        if (not start_date or start_date <= punch_date_str) and (not end_date or end_date >= punch_date_str):
             return assignment.get('shift_type')
     return None
 
@@ -178,6 +203,16 @@ def _ensure_temporary_shift_assignment(employee, shift_name, punch_date):
     cache_key = f"{employee['name']}::{shift_name}::{date_str}"
     if cache_key in TEMP_SHIFT_ASSIGNMENT_CACHE:
         return True
+    with ERP_CACHE_LOCK:
+        cached_assignments = SHIFT_ASSIGNMENT_CACHE.get(employee['name'], [])
+        for assignment in cached_assignments:
+            start_date = assignment.get('start_date')
+            end_date = assignment.get('end_date')
+            if (assignment.get('shift_type') == shift_name
+                    and (not start_date or start_date <= date_str)
+                    and (not end_date or end_date >= date_str)):
+                TEMP_SHIFT_ASSIGNMENT_CACHE.add(cache_key)
+                return True
 
     try:
         existing = _erp_get('/api/resource/Shift Assignment', params={
@@ -207,23 +242,30 @@ def _ensure_temporary_shift_assignment(employee, shift_name, punch_date):
             'status': 'Active'
         }
 
-        create_res = requests.post(
+        create_res = _http_session().post(
             f"{config.ERPNEXT_URL}/api/resource/Shift Assignment",
-            headers=_erp_headers(),
             json=payload,
             timeout=30
         )
         create_res.raise_for_status()
         created_doc = create_res.json().get('data', {})
 
-        submit_res = requests.post(
+        submit_res = _http_session().post(
             f"{config.ERPNEXT_URL}/api/method/frappe.client.submit",
-            headers=_erp_headers(),
             json={'doc': created_doc},
             timeout=30
         )
         if submit_res.status_code == 200:
             TEMP_SHIFT_ASSIGNMENT_CACHE.add(cache_key)
+            with ERP_CACHE_LOCK:
+                if employee['name'] in SHIFT_ASSIGNMENT_CACHE:
+                    SHIFT_ASSIGNMENT_CACHE[employee['name']].insert(0, {
+                        'name': created_doc.get('name'),
+                        'shift_type': shift_name,
+                        'start_date': date_str,
+                        'end_date': date_str,
+                        'status': 'Active',
+                    })
             info_logger.info("\t".join([
                 "Auto-created Shift Assignment",
                 employee['name'],
@@ -603,6 +645,10 @@ def main():
     try:
         last_lift_off_timestamp = _safe_convert_date(status.get('lift_off_timestamp'), "%Y-%m-%d %H:%M:%S.%f")
         if RANGE_SYNC or (last_lift_off_timestamp and last_lift_off_timestamp < datetime.datetime.now() - datetime.timedelta(minutes=config.PULL_FREQUENCY)) or not last_lift_off_timestamp:
+            with ERP_CACHE_LOCK:
+                EMPLOYEE_LOOKUP_CACHE.clear()
+                SHIFT_ASSIGNMENT_CACHE.clear()
+                TEMP_SHIFT_ASSIGNMENT_CACHE.clear()
             selected_devices = [
                 device for device in config.devices
                 if not REQUESTED_DEVICE_IDS or str(device.get('device_id')) in REQUESTED_DEVICE_IDS
@@ -935,10 +981,6 @@ def get_all_attendance_from_device(ip, port=4370, timeout=30, device_id=None, cl
 def send_to_erpnext(employee_field_value, timestamp, device_id=None, log_type=None, latitude=None, longitude=None):
     endpoint_app = "hrms" if ERPNEXT_VERSION > 13 else "erpnext"
     url = f"{config.ERPNEXT_URL}/api/method/{endpoint_app}.hr.doctype.employee_checkin.employee_checkin.add_log_based_on_employee_field"
-    headers = {
-        'Authorization': "token " + config.ERPNEXT_API_KEY + ":" + config.ERPNEXT_API_SECRET,
-        'Accept': 'application/json'
-    }
     data = {
         'employee_field_value': employee_field_value,
         'timestamp': timestamp.__str__(),
@@ -947,7 +989,7 @@ def send_to_erpnext(employee_field_value, timestamp, device_id=None, log_type=No
         'latitude': latitude,
         'longitude': longitude
     }
-    response = requests.request("POST", url, headers=headers, json=data)
+    response = _http_session().post(url, json=data, timeout=30)
     if response.status_code == 200:
         return 200, json.loads(response._content)['message']['name']
     else:
