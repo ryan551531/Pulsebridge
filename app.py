@@ -940,15 +940,19 @@ def api_service(action: str):
             message = "A sync cycle was started."
         elif action == "run-device":
             payload = request.get_json(silent=True) or {}
-            device_id = str(payload.get("device_id") or "").strip()
-            configured_ids = {
+            requested_ids = payload.get("device_ids")
+            if not isinstance(requested_ids, list):
+                requested_ids = [payload.get("device_id")]
+            requested_ids = {str(value or "").strip() for value in requested_ids if str(value or "").strip()}
+            configured_ids = [
                 str(item.get("device_id") or "")
                 for item in load_config(include_secret=False).get("devices", [])
-            }
-            if not device_id or device_id not in configured_ids:
-                return _json_error("Save this device before synchronizing it.", 400)
-            state = service.start(once=True, device_ids=[device_id])
-            message = f"Attendance sync started for {device_id.replace('_', ' ').title()}."
+            ]
+            selected_ids = [device_id for device_id in configured_ids if device_id in requested_ids]
+            if not selected_ids:
+                return _json_error("Select at least one saved device to synchronize.", 400)
+            state = service.start(once=True, device_ids=selected_ids)
+            message = f"Attendance sync started for {len(selected_ids)} selected location{'s' if len(selected_ids) != 1 else ''}."
         elif action == "stop":
             state = service.stop()
             message = "Sync service stopped."
