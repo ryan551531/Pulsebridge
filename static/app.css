@@ -124,6 +124,11 @@ main { min-width: 0; padding: 34px clamp(24px, 4vw, 68px) 60px; }
 .sync-device-row.completed-with-errors .sync-device-bar i { background: var(--red); }
 .sync-device-stats { min-width: 112px; color: var(--muted); font-size: 8px; line-height: 1.55; text-align: right; white-space: nowrap; }
 .sync-device-stats b { display: block; color: var(--ink); font-size: 10px; font-variant-numeric: tabular-nums; }
+.sync-device-stats b small { margin-right: 5px; color: var(--muted); font-size: 7px; letter-spacing: .08em; }
+.upload-progress-head { margin-top: 5px; display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 7px; font-weight: 850; letter-spacing: .08em; }
+.upload-progress-head strong { color: var(--green); font-size: 8px; }
+.upload-progress-track { width: 112px; height: 4px; margin: 3px 0 4px auto; overflow: hidden; border-radius: 999px; background: var(--line); }
+.upload-progress-track i { height: 100%; display: block; border-radius: inherit; background: var(--green); transition: width .5s ease; }
 .sync-progress-counts { margin-top: 10px; display: block; color: var(--muted); font-size: 9px; }
 .system-clock { min-width: 142px; padding-right: 16px; display: grid; justify-items: end; align-content: center; border-right: 1px solid var(--line); }
 .system-clock small, .system-clock span { color: var(--muted); font-size: 9px; letter-spacing: .09em; }
@@ -316,17 +321,23 @@ tbody tr:last-child td { border-bottom: 0; }
 .empty-cell { padding: 28px; color: var(--muted); text-align: center; }
 
 .device-editor { display: grid; gap: 12px; }
+.device-sync-toolbar { margin-bottom: 12px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.device-sync-toolbar strong, .device-sync-toolbar span { display: block; }
+.device-sync-toolbar strong { color: var(--green); font-size: 12px; }
+.device-sync-toolbar span { margin-top: 3px; color: var(--muted); font-size: 10px; }
 .clock-control { margin-bottom: 12px; padding: 22px; display: flex; justify-content: space-between; align-items: center; gap: 24px; border: 1px solid #d4df54; border-radius: 14px; background: #f5f8d9; }
 .clock-control h3 { margin: 0; font-family: Georgia, serif; font-size: 24px; font-weight: 500; }
 .clock-control p:last-child { margin: 7px 0 0; color: var(--muted); font-size: 12px; }
 .clock-results { margin-bottom: 12px; display: grid; gap: 6px; }
 .clock-result { padding: 10px 13px; display: flex; justify-content: space-between; gap: 12px; border-radius: 8px; color: var(--green); background: #e4f1e9; font-size: 11px; }
 .clock-result.failed { color: var(--red); background: #fff0ed; }
-.device-row { padding: 20px; display: grid; grid-template-columns: 1.1fr 1fr 1fr .8fr 1.35fr; gap: 12px; align-items: end; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+.device-row { padding: 20px; display: grid; grid-template-columns: 1.1fr 1fr 1fr .8fr 2.3fr; gap: 12px; align-items: end; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
 .device-row.is-new { border-color: #b9cb34; box-shadow: 0 0 0 3px rgba(212,223,84,.16); }
 .device-row .field label { font-size: 10px; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; }
 .icon-button { width: 42px; height: 42px; border: 1px solid #ead0cc; border-radius: 8px; color: var(--red); background: #fff7f5; font-weight: 800; }
 .row-actions { display: flex; gap: 8px; }
+.device-sync-select { min-height: 42px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); font-size: 9px; font-weight: 800; cursor: pointer; }
+.device-sync-select input { width: 15px; min-height: 15px; accent-color: var(--green); }
 .row-actions .button { min-height: 42px; padding: 0 13px; font-size: 11px; }
 .test-device { min-height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--green); background: transparent; font-size: 11px; font-weight: 800; }
 .sync-attendance { min-height: 42px; padding: 0 12px; border: 1px solid var(--green); border-radius: 8px; color: #fff; background: var(--green); font-size: 11px; font-weight: 800; }

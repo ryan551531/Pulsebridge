@@ -267,7 +267,7 @@ function deviceRow(device = {}, { isNew = false } = {}) {
     <div class="field"><label>Private IP address</label><input data-key="ip" value="${escapeAttr(device.ip || "")}" placeholder="192.168.1.201"></div>
     <div class="field"><label>ERPNext shift</label><input data-key="shift" value="${escapeAttr(device.shift || "")}" placeholder="Day Shift"></div>
     <div class="field"><label>Punch direction</label><select data-key="punch_direction"><option>AUTO</option><option>IN</option><option>OUT</option><option>NONE</option></select></div>
-    <div class="row-actions"><button class="save-device button primary" type="button">Save</button><button class="test-device" type="button">Test</button><button class="sync-attendance" type="button">Sync attendance</button><button class="sync-device-time" type="button">Sync clock</button><button class="icon-button" type="button" aria-label="Remove device">×</button></div>`;
+    <div class="row-actions"><label class="device-sync-select"><input type="checkbox" data-sync-select><span>Select</span></label><button class="save-device button primary" type="button">Save</button><button class="test-device" type="button">Test</button><button class="sync-attendance" type="button">Sync attendance</button><button class="sync-device-time" type="button">Sync clock</button><button class="icon-button" type="button" aria-label="Remove device">×</button></div>`;
   $("select", row).value = device.punch_direction || "AUTO";
   $(".save-device", row).addEventListener("click", async (event) => {
     const button = event.currentTarget;
@@ -278,7 +278,9 @@ function deviceRow(device = {}, { isNew = false } = {}) {
   $(".icon-button", row).addEventListener("click", () => {
     row.remove();
     configFormState.dirty = true;
+    updateDeviceSelection();
   });
+  $('[data-sync-select]', row).addEventListener("change", updateDeviceSelection);
   $(".test-device", row).addEventListener("click", async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
@@ -324,6 +326,13 @@ function renderDevices(devices) {
   root.innerHTML = "";
   devices.forEach((device) => root.append(deviceRow(device)));
   if (!devices.length) root.append(deviceRow({}, { isNew: true }));
+  updateDeviceSelection();
+}
+
+function updateDeviceSelection() {
+  const selected = $$('[data-sync-select]:checked', $("#deviceEditor"));
+  $("#selectedDeviceCount").textContent = `${selected.length} location${selected.length === 1 ? "" : "s"} selected`;
+  $("#syncSelectedDevicesButton").disabled = selected.length === 0 || Boolean(state.service?.running);
 }
 
 function collectDevices() {
@@ -576,7 +585,7 @@ function renderSyncProgress() {
       html: `<div class="sync-device-row ${escapeAttr(deviceState.replaceAll("_", "-"))}">
         <div class="sync-device-identity"><strong>${escapeHtml(displayName(device.device_id))}</strong><span>Device ${Number(saved.index || index + 1)} of ${total || displayedDevices.length}</span></div>
         <div class="sync-device-date"><strong>${escapeHtml(dateLabel)}</strong><span>${escapeHtml(stateLabel)} · ${escapeHtml(deviceFrom)} through ${escapeHtml(deviceTo)}</span><div class="sync-device-bar"><i style="width:${estimate.toFixed(1)}%"></i></div></div>
-        <div class="sync-device-stats"><b>${Math.round(estimate)}%</b>${processed}${recordsTotal ? ` / ${recordsTotal}` : ""} punches · ${Number(saved.failed || 0)} failed</div>
+        <div class="sync-device-stats"><b><small>OVERALL</small>${Math.round(estimate)}%</b><div class="upload-progress-head"><span>UPLOAD</span><strong>${Math.round(realPercent)}%</strong></div><div class="upload-progress-track"><i style="width:${realPercent.toFixed(1)}%"></i></div>${processed}${recordsTotal ? ` / ${recordsTotal}` : ""} punches · ${Number(saved.failed || 0)} failed</div>
       </div>`,
     };
   });
@@ -949,6 +958,23 @@ $("#syncAllClocksButton").addEventListener("click", async (event) => {
     showToast(result.message, result.succeeded !== result.total);
   } catch (error) { showToast(error.message, true); }
   finally { button.disabled = false; button.textContent = "Sync all device clocks"; }
+});
+$("#syncSelectedDevicesButton").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const deviceIds = $$('[data-sync-select]:checked', $("#deviceEditor"))
+    .map((checkbox) => $('[data-key="device_id"]', checkbox.closest(".device-row")).value.trim())
+    .filter(Boolean);
+  if (!deviceIds.length) { showToast("Select at least one saved location.", true); return; }
+  button.disabled = true;
+  button.textContent = "Starting selected sync…";
+  try {
+    await saveAll();
+    const result = await api("/api/service/run-device", { method: "POST", body: JSON.stringify({ device_ids: deviceIds }) });
+    startSyncProgress();
+    showToast(result.message);
+    await loadState();
+  } catch (error) { showToast(error.message, true); }
+  finally { button.textContent = "Sync selected locations"; updateDeviceSelection(); }
 });
 $("#addDeviceButton").addEventListener("click", () => {
   const row = deviceRow({}, { isNew: true });
