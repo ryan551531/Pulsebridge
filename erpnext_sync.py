@@ -877,7 +877,11 @@ def _update_sync_progress(
     status.save()
 
 def get_all_attendance_from_device(ip, port=4370, timeout=30, device_id=None, clear_from_device_on_fetch=False):
-    zk = ZK(ip, port=port, timeout=timeout)
+    # The application runs as an unprivileged service account in Linux/LXC.
+    # pyzk's preliminary ICMP probe requires privileges that account may not
+    # have, even though the terminal's ZKTeco service is reachable on port 4370.
+    # Connect directly and let the protocol exchange determine availability.
+    zk = ZK(ip, port=port, timeout=timeout, ommit_ping=True)
     conn = None
     attendances = []
     try:

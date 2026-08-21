@@ -570,6 +570,7 @@ def _scan_device_users(config: dict[str, Any], device_id: str) -> dict[str, Any]
             str(device.get("ip", "")),
             port=int(device.get("port", 4370)),
             timeout=20,
+            ommit_ping=True,
         ).connect()
         users = connection.get_users() or []
         # Only the template UID and count are retained. Biometric template
@@ -677,7 +678,12 @@ def _sync_device_clock(device: dict[str, Any]) -> dict[str, Any]:
     ip = str(device.get("ip", ""))
     connection = None
     try:
-        connection = ZK(ip, port=int(device.get("port", 4370)), timeout=12).connect()
+        connection = ZK(
+            ip,
+            port=int(device.get("port", 4370)),
+            timeout=12,
+            ommit_ping=True,
+        ).connect()
         before = connection.get_time()
         target = datetime.now().replace(microsecond=0)
         connection.set_time(target)
@@ -980,7 +986,7 @@ def test_device():
             return _json_error("Device tests are limited to private network addresses.")
         from zk import ZK
 
-        connection = ZK(ip, port=4370, timeout=8).connect()
+        connection = ZK(ip, port=4370, timeout=20, ommit_ping=True).connect()
         try:
             name = connection.get_device_name() or "biometric device"
         finally:
@@ -1064,6 +1070,7 @@ def api_update_device_user_name():
             str(device.get("ip", "")),
             port=int(device.get("port", 4370)),
             timeout=20,
+            ommit_ping=True,
         ).connect()
         user = next((item for item in (connection.get_users() or []) if str(item.user_id) == user_id), None)
         if not user:
