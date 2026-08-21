@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Manage biometric attendance synchronization with ERPNext.">
+  <meta name="author" content="Ryan Brown">
+  <title>PulseBridge · ERPNext Biometric Sync</title>
+  <link rel="icon" id="appFavicon" href="data:,">
+  <link rel="stylesheet" href="/static/app.css?v=20260818-9">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="#dashboard" aria-label="PulseBridge home">
+        <span class="brand-mark" id="brandMark">P</span>
+        <span><strong id="brandName">PulseBridge</strong><small>ERPNext Sync</small></span>
+      </a>
+      <nav aria-label="Main navigation">
+        <button class="nav-link active" data-view="dashboard">Dashboard</button>
+        <button class="nav-link" data-view="workforce">Workforce</button>
+        <button class="nav-link admin-only" data-view="device-users" hidden>Device users</button>
+        <button class="nav-link" data-view="corrections">Corrections</button>
+        <button class="nav-link" data-view="configuration">Configuration</button>
+        <button class="nav-link" data-view="devices">Devices</button>
+        <button class="nav-link" data-view="logs">Activity logs</button>
+        <button class="nav-link admin-only" data-view="admin" hidden>Administration</button>
+        <a class="nav-link nav-external admin-only" id="erpHrmLink" href="#" target="_blank" rel="noopener noreferrer" hidden>ERPNext HRM <span aria-hidden="true">↗</span></a>
+      </nav>
+      <div class="sidebar-foot">
+        <span class="status-dot" id="sideStatusDot"></span>
+        <div><strong id="sideStatus">Checking…</strong><small>Sync engine</small></div>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ATTENDANCE OPERATIONS</p>
+          <h1 id="pageTitle">Good day</h1>
+        </div>
+        <div class="top-actions">
+          <div class="erp-connection checking" id="erpConnection"><i></i><span><strong>ERPNext</strong><small>Checking…</small></span></div>
+          <div class="system-clock" aria-label="PC system clock"><small>PC SYSTEM TIME</small><strong id="systemClock">--:--:--</strong><span id="systemDate">Loading date</span></div>
+          <button class="button ghost" id="refreshButton">Refresh</button>
+          <button class="button ghost" id="serviceToggleButton">Start continuous</button>
+          <button class="button primary" id="runOnceButton">Run sync now</button>
+        </div>
+      </header>
+      <div class="sync-progress" id="syncProgress" hidden>
+        <div class="sync-progress-head"><div><small>ATTENDANCE SYNC PROGRESS</small><strong id="syncProgressLabel">Starting synchronization…</strong></div><b id="syncProgressPercent">0%</b></div>
+        <div class="sync-overall-track"><span id="syncProgressBar"></span></div>
+        <small class="sync-progress-counts" id="syncProgressCounts">Preparing configured devices…</small>
+        <details class="sync-device-details" id="syncDeviceDetails">
+          <summary><span>Device progress</span><small id="syncDeviceSummary">Preparing devices…</small></summary>
+          <div class="sync-device-progress" id="syncDeviceProgress"></div>
+        </details>
+      </div>
+
+      <section class="view active" id="view-dashboard">
+        <div class="hero-panel">
+          <div>
+            <span class="live-pill"><i></i><span id="heroState">Loading service state</span></span>
+            <h2>Attendance, moving<br>without the guesswork.</h2>
+            <p>One clear view from every biometric terminal to ERPNext.</p>
+          </div>
+          <div class="hero-cycle">
+            <small>LAST COMPLETED CYCLE</small>
+            <strong id="lastCycle">Never</strong>
+            <span id="cycleDetail">Waiting for the first synchronization</span>
+          </div>
+        </div>
+
+        <div class="metrics">
+          <article class="employee-total"><span>Active employees</span><strong id="employeeCount">—</strong><small>Across all locations</small></article>
+          <article><span>Configured devices</span><strong id="deviceCount">0</strong><small>Across all locations</small></article>
+          <article><span>Successful check-ins</span><strong id="successCount">0</strong><small>In retained logs</small></article>
+          <article><span>Needs attention</span><strong id="failureCount">0</strong><small>Failures that stopped processing</small></article>
+        </div>
+
+        <div class="section-head">
+          <div><p class="eyebrow">DEVICE HEALTH</p><h3>Locations at a glance</h3></div>
+          <button class="text-button" data-go="devices">Manage devices →</button>
+        </div>
+        <div class="device-grid" id="overviewDevices"></div>
+      </section>
+
+      <section class="view" id="view-workforce">
+        <div class="section-head compact">
+          <div><p class="eyebrow">WORKFORCE</p><h2>Employees by location</h2><p>Active employees grouped by ERPNext Branch.</p></div>
+          <span class="data-note" id="employeeStatus">Loading from ERPNext…</span>
+        </div>
+        <div class="workforce-total"><span>ALL LOCATIONS</span><strong id="workforceTotal">—</strong><small>Active employees in ERPNext</small></div>
+        <div class="employee-grid" id="employeeLocations"></div>
+      </section>
+
+      <section class="view" id="view-device-users">
+        <div class="section-head compact">
+          <div><p class="eyebrow">DEVICE DIRECTORY</p><h2>Import clock users</h2><p>Scan a ZKTeco clock directly, compare enrolled users with ERPNext, and create selected missing employees for HR completion.</p></div>
+        </div>
+        <div class="device-user-scan">
+          <label>Biometric location<select id="deviceUserLocation"></select></label>
+          <button class="button primary" id="scanDeviceUsers">Scan device users</button>
+          <span id="deviceUserScanStatus">Choose a reachable device.</span>
+        </div>
+        <div class="device-user-metrics" id="deviceUserMetrics" hidden></div>
+        <div class="device-user-import" id="deviceUserImport" hidden>
+          <div class="import-guidance"><strong>Clock and ERPNext identity</strong><span>Edit a name and use <b>Save to clock</b> to rename that device user. For new ERPNext employees, Employee ID can be edited; Biometric ID is locked to the clock User ID so future punches match. Employees are created <b>Inactive</b> for HR review.</span></div>
+          <div class="import-defaults">
+            <label>Company<select id="deviceUserCompany"></select></label>
+            <label>Branch<select id="deviceUserBranch"></select></label>
+            <label>Date of joining<input id="deviceUserJoiningDate" type="date"></label>
+            <button class="button primary" id="importDeviceUsers">Upload selected to ERPNext</button>
+          </div>
+          <div class="device-user-toolbar">
+            <label>Show<select id="deviceUserFilter"><option value="all">All users</option><option value="eligible">Eligible</option><option value="missing">Missing in ERPNext</option><option value="exists">Exists in ERPNext</option><option value="possible">Possible match</option><option value="no-fingerprint">No fingerprint</option></select></label>
+            <label>Search<input id="deviceUserSearch" type="search" placeholder="Name or user ID"></label>
+            <label>Rows<select id="deviceUserPageSize"><option value="20">20</option><option value="30">30</option><option value="50">50</option><option value="100">100</option></select></label>
+            <div class="selection-count" id="deviceUserSelectedCount"><strong>0 selected</strong><span>No users selected</span></div>
+            <div class="device-user-pagination"><button class="button ghost" id="deviceUserPrev" type="button">Previous</button><span id="deviceUserPageLabel">0 users</span><button class="button ghost" id="deviceUserNext" type="button">Next</button></div>
+          </div>
+          <div class="table-card device-user-table"><table><thead><tr><th>Select</th><th>Clock User ID</th><th>Employee name</th><th>ERP Employee ID</th><th>Biometric ID</th><th>Clock action</th><th>Fingerprints</th><th>ERPNext</th><th>Gender</th><th>Date of birth</th></tr></thead><tbody id="deviceUserRows"></tbody></table></div>
+          <div class="import-results" id="deviceUserImportResults" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-corrections">
+        <div class="section-head compact">
+          <div><p class="eyebrow">ATTENDANCE SAFETY NET</p><h2>Single-punch corrections</h2><p>Missing IN or OUT punches are issued only after the shift and its grace period have ended.</p></div>
+          <button class="button ghost" id="refreshCorrections">Refresh</button>
+        </div>
+        <div class="correction-banner">
+          <div><strong id="correctionState">Loading correction status…</strong><span>Generated records use the device label <code>AUTO-CORRECTION</code> and receive an ERPNext comment for review.</span></div>
+          <label class="toggle-control"><input id="correctionOverallToggle" type="checkbox"><span class="toggle-track"></span><b>All locations</b></label>
+        </div>
+        <div class="location-correction-card">
+          <div class="location-correction-head"><div><p class="eyebrow">LOCATION CONTROL</p><h3>Automatic time correction</h3><p>Turn correction off only where you do not want PulseBridge creating a missing IN or OUT.</p></div><button class="button primary" id="saveCorrectionSettings">Save correction settings</button></div>
+          <div class="location-toggle-grid" id="locationCorrectionToggles"></div>
+        </div>
+        <div class="shift-health" id="shiftHealth"></div>
+        <div class="section-head correction-head"><div><p class="eyebrow">WAITING</p><h3>Unmatched real punches</h3></div><span class="data-note" id="pendingCount">0 pending</span></div>
+        <div class="correction-range-card">
+          <div><strong>Correct a date range</strong><span>Only unmatched punches from enabled locations are processed. Shifts still inside their grace period remain waiting.</span></div>
+          <label>From<input id="correctionFromDate" type="date"></label>
+          <label>Through<input id="correctionToDate" type="date"></label>
+          <button class="button primary" id="runCorrectionRange">Correct selected range</button>
+        </div>
+        <div class="table-card pending-table-card"><table><thead><tr><th>Employee ID</th><th>Location</th><th>Assignment date</th><th>Shift</th><th>Real punch</th><th>Will issue</th></tr></thead><tbody id="pendingCorrections"></tbody></table></div>
+        <div class="section-head correction-head"><div><p class="eyebrow">AUDIT</p><h3>Issued corrections</h3></div></div>
+        <div class="log-panel"><pre id="correctionHistory">Loading…</pre></div>
+      </section>
+
+      <section class="view" id="view-configuration">
+        <div class="section-head compact">
+          <div><p class="eyebrow">CONNECTION</p><h2>ERPNext configuration</h2><p>Credentials stay on this server and are never shown after saving.</p></div>
+        </div>
+        <form id="configForm" class="form-card">
+          <div class="field wide"><label for="erpUrl">ERPNext URL</label><input id="erpUrl" type="url" required placeholder="https://erp.yourcompany.com"></div>
+          <div class="field"><label for="apiKey">API key</label><div class="secret-input"><input id="apiKey" type="password" required autocomplete="off"><button type="button" data-reveal="apiKey" aria-label="Show API key">Show</button></div></div>
+          <div class="field"><label for="apiSecret">API secret</label><div class="secret-input"><input id="apiSecret" type="password" autocomplete="new-password" placeholder="Leave blank to keep saved secret"><button type="button" data-reveal="apiSecret" aria-label="Show API secret">Show</button></div><small id="secretHint"></small></div>
+          <div class="field"><label for="erpVersion">ERPNext version</label><input id="erpVersion" type="number" min="12" value="15"></div>
+          <div class="field"><label for="pullFrequency">Pull every (minutes)</label><input id="pullFrequency" type="number" min="1" max="1440" value="15"></div>
+          <div class="field"><label for="importStartDate">Sync punches from</label><input id="importStartDate" type="date"><small>Manual “Run sync now” begins on this date.</small></div>
+          <div class="field"><label for="importEndDate">Sync punches through</label><input id="importEndDate" type="date"><small>Inclusive. Leave blank to sync through today.</small></div>
+          <details class="advanced wide">
+            <summary>Advanced shift logic</summary>
+            <p>These fields preserve the custom logic from your existing <code>local_config.py</code>. Values use JSON format.</p>
+            <div class="advanced-grid">
+              <div class="field"><label for="defaultShifts">Device default shifts</label><textarea id="defaultShifts" rows="7" spellcheck="false"></textarea></div>
+              <div class="field"><label for="shiftBoundaries">Shift boundaries</label><textarea id="shiftBoundaries" rows="7" spellcheck="false"></textarea></div>
+              <div class="field"><label for="shiftLogic">IN/OUT time windows</label><textarea id="shiftLogic" rows="10" spellcheck="false"></textarea></div>
+              <div class="field"><label for="allowedDeviceShifts">Allowed shifts by device</label><textarea id="allowedDeviceShifts" rows="10" spellcheck="false"></textarea></div>
+              <label class="check-field"><input id="autoShift" type="checkbox"> Automatically detect shifts from punch time</label>
+              <label class="check-field"><input id="autoAssignment" type="checkbox"> Create temporary Shift Assignments when needed</label>
+              <label class="check-field"><input id="autoCorrectPunches" type="checkbox"> Correct a missing IN or OUT after the shift grace period</label>
+              <label class="check-field"><input id="syncDeviceTime" type="checkbox"> Automatically set every device clock from this PC during attendance sync</label>
+              <div class="field"><label for="singlePunchGrace">Single-punch grace by shift (minutes)</label><textarea id="singlePunchGrace" rows="7" spellcheck="false"></textarea></div>
+              <div class="field"><label for="maxShiftDistance">Maximum shift distance (minutes)</label><input id="maxShiftDistance" type="number" min="1" max="1440"></div>
+              <div class="field"><label for="assignmentPrefix">Automatic assignment prefix</label><input id="assignmentPrefix"></div>
+            </div>
+          </details>
+          <div class="form-actions wide">
+            <button type="button" class="button ghost" id="testErpButton">Test connection</button>
+            <button type="submit" class="button primary">Save configuration</button>
+          </div>
+        </form>
+        <div class="warning-card"><strong>Permission checklist</strong><p>The ERPNext API user needs Create access to Employee Checkin and Write access to Shift Type.</p></div>
+      </section>
+
+      <section class="view" id="view-devices">
+        <div class="section-head compact">
+          <div><p class="eyebrow">TERMINALS</p><h2>Biometric devices</h2><p>Add each ZKTeco-compatible terminal reachable from this server.</p></div>
+          <button class="button primary" id="addDeviceButton">+ Add device</button>
+        </div>
+        <div class="clock-control">
+          <div><p class="eyebrow">CLOCK CONTROL</p><h3>ZKTeco device time</h3><p>PC time is authoritative. Manual sync sets every reachable terminal to this computer's local time.</p></div>
+          <button class="button primary" id="syncAllClocksButton">Sync all device clocks</button>
+        </div>
+        <div class="clock-results" id="clockSyncResults" aria-live="polite"></div>
+        <div id="deviceEditor" class="device-editor"></div>
+      </section>
+
+      <section class="view" id="view-logs">
+        <div class="section-head compact">
+          <div><p class="eyebrow">AUDIT TRAIL</p><h2>Activity logs</h2><p>Recent sync messages from this installation.</p></div>
+          <div class="segmented" role="group" aria-label="Log type">
+            <button class="active" data-log="activity">Activity</button><button data-log="errors">Errors</button><button data-log="console">Console</button><button data-log="history">History</button>
+          </div>
+        </div>
+        <div class="log-panel"><div class="log-toolbar"><span id="logLabel">Activity</span><button class="text-button" id="refreshLogs">Refresh</button></div><pre id="logOutput">Loading…</pre></div>
+      </section>
+      <section class="view" id="view-admin">
+        <div class="section-head compact"><div><p class="eyebrow">OWNER CONTROL</p><h2>Administration</h2><p>Only administrators can manage access and branding.</p></div></div>
+        <div class="admin-grid">
+          <form class="form-card admin-card" id="brandingForm">
+            <div class="field wide"><label for="adminAppName">Application name</label><input id="adminAppName" maxlength="60"></div>
+            <div class="field wide"><label for="adminLogo">Logo image</label><input id="adminLogo" type="file" accept="image/png,image/jpeg,image/webp"><small>PNG, JPEG, or WebP; maximum 1.5 MB.</small></div>
+            <div class="field wide"><label for="adminFooter">Footer text</label><input id="adminFooter" maxlength="160"></div>
+            <div class="field"><label for="adminThemePreset">Color theme</label><select id="adminThemePreset"><option value="pulse">PulseBridge default</option><option value="logo">Logo colors</option><option value="ocean">Ocean</option><option value="royal">Royal</option><option value="sunset">Sunset</option></select></div>
+            <div class="field"><label for="adminThemeMode">Appearance</label><select id="adminThemeMode"><option value="light">Light mode</option><option value="dark">Dark mode</option></select></div>
+            <small class="theme-admin-note wide">The saved theme is applied to the dashboard for every user. Logo colors are generated from the uploaded logo.</small>
+            <div class="form-actions wide"><button type="submit" class="button primary">Save branding</button></div>
+          </form>
+          <form class="form-card admin-card" id="userForm">
+            <input id="editUserId" type="hidden">
+            <div class="field"><label for="adminUsername">Username</label><input id="adminUsername" required minlength="3" maxlength="50" autocomplete="off"></div>
+            <div class="field"><label for="adminPassword">Password</label><input id="adminPassword" type="password" minlength="10" autocomplete="new-password" placeholder="10 characters minimum"></div>
+            <div class="field"><label for="adminRole">Role</label><select id="adminRole"><option value="user">User</option><option value="admin">Administrator</option></select></div>
+            <label class="check-field"><input id="adminUserActive" type="checkbox" checked> Account active</label>
+            <div class="form-actions wide"><button type="button" class="button ghost" id="cancelUserEdit">Clear</button><button type="submit" class="button primary">Save user</button></div>
+          </form>
+        </div>
+        <div class="table-card"><table><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead><tbody id="adminUsers"></tbody></table></div>
+        <section class="backup-section" aria-labelledby="backupTitle">
+          <div class="backup-head">
+            <div><p class="eyebrow">CONFIGURATION SAFETY</p><h3 id="backupTitle">Backup &amp; restore</h3><p>Save the complete PulseBridge setup to one password-encrypted file, then restore it on this PC or a new installation.</p></div>
+            <div class="backup-scope"><span>ERPNext credentials</span><span>Devices &amp; shifts</span><span>Correction settings</span><span>Branding &amp; themes</span><span>Users &amp; administrators</span></div>
+          </div>
+          <div class="backup-grid">
+            <form class="backup-panel" id="backupExportForm">
+              <span class="backup-number">01</span><h4>Create backup</h4><p>Choose a password you will remember. PulseBridge cannot recover a forgotten backup password.</p>
+              <label>Backup password<input id="backupExportPassword" type="password" required minlength="10" maxlength="256" autocomplete="new-password" placeholder="10 characters minimum"></label>
+              <label>Confirm password<input id="backupExportConfirm" type="password" required minlength="10" maxlength="256" autocomplete="new-password" placeholder="Repeat backup password"></label>
+              <button class="button primary" type="submit">Download encrypted backup</button>
+            </form>
+            <form class="backup-panel restore-panel" id="backupRestoreForm">
+              <span class="backup-number">02</span><h4>Restore backup</h4><p>Restoring replaces all local configuration, branding, themes, and user accounts with the contents of the file.</p>
+              <label>Backup file<input id="backupRestoreFile" type="file" required accept=".pulsebackup,application/octet-stream"></label>
+              <label>Backup password<input id="backupRestorePassword" type="password" required minlength="10" maxlength="256" autocomplete="current-password" placeholder="Password used to create backup"></label>
+              <button class="button danger" type="submit">Restore complete setup</button>
+            </form>
+          </div>
+          <p class="backup-note"><strong>Not included:</strong> employee and attendance records already stored in ERPNext, biometric fingerprints stored on clocks, and temporary activity logs.</p>
+        </section>
+      </section>
+      <footer class="developer-credit"><span id="footerBrand">PulseBridge</span> · <strong id="footerText">Developed by Ryan Brown</strong></footer>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/static/app.js?v=20260818-9" defer></script>
+</body>
+</html>

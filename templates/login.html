@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · {{ branding.app_name }}</title>
+  {% if branding.logo_data %}<link rel="icon" href="{{ branding.logo_data }}">{% endif %}
+  <link rel="stylesheet" href="/static/app.css?v=20260818-9">
+</head>
+<body class="login-page" data-theme="{{ branding.theme_preset }}" data-mode="{{ branding.theme_mode }}">
+  <div class="login-orb login-orb-one"></div>
+  <div class="login-orb login-orb-two"></div>
+  <main class="login-shell">
+    <section class="login-story" aria-label="PulseBridge overview">
+      <div class="login-brand">
+        {% if branding.logo_data %}<img src="{{ branding.logo_data }}" alt="">{% else %}<span>{{ branding.app_name[:1] }}</span>{% endif %}
+        <strong>{{ branding.app_name }}</strong>
+      </div>
+      <div class="login-story-copy">
+        <span class="login-live"><i></i> Attendance operations online</span>
+        <h1>Every clock.<br><em>One clear view.</em></h1>
+        <p>Securely connect your biometric terminals, workforce, and ERPNext attendance records from one place.</p>
+      </div>
+      <div class="login-features">
+        <div><b>01</b><span><strong>Live device health</strong><small>See every connected location</small></span></div>
+        <div><b>02</b><span><strong>Reliable attendance</strong><small>Keep shifts and punches aligned</small></span></div>
+        <div><b>03</b><span><strong>Protected access</strong><small>Accounts managed by your administrator</small></span></div>
+      </div>
+    </section>
+    <section class="login-panel">
+      <div class="login-card">
+        <span class="login-secure">Private network · Secure access</span>
+        <p class="eyebrow">WELCOME BACK</p>
+        <h2>Sign in to continue</h2>
+        <p class="login-intro">Enter the account provided by your PulseBridge administrator.</p>
+        {% if error %}<div class="login-error">{{ error }}</div>{% endif %}
+        <form method="post">
+          <label>Username<input name="username" required autofocus autocomplete="username" placeholder="Enter your username"></label>
+          <label>Password<input name="password" type="password" required autocomplete="current-password" placeholder="Enter your password"></label>
+          <button class="button primary" type="submit"><span>Sign in securely</span><b aria-hidden="true">→</b></button>
+        </form>
+        <div class="login-help"><i>●</i><span>Need access? Contact your administrator.</span></div>
+      </div>
+      <footer>{{ branding.footer_text }}</footer>
+    </section>
+  </main>
+</body>
+</html>
