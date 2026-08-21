@@ -49,9 +49,9 @@ Alternatively, open PowerShell in this folder and run:
 
 The local address is `http://127.0.0.1:8088`.
 
-The Windows starter listens on the local network at port 8088. The owner PC at
-`192.168.0.32` and localhost receive automatic administrator access. Every
-other device is redirected to the sign-in screen; there is no public sign-up.
+The Windows starter listens on the local network at port 8088. Localhost receives
+automatic administrator access by default. Every other device is redirected to
+the sign-in screen; there is no public sign-up.
 The owner creates and manages password accounts from **Administration**.
 
 Passwords are stored as one-way hashes in `data/pulsebridge-auth.db`. Session
@@ -61,8 +61,7 @@ the distributable ZIP.
 To change the trusted owner address, set it before starting:
 
 ```powershell
-$env:PULSEBRIDGE_ADMIN_IPS = '192.168.0.32,127.0.0.1,::1'
-.\start-dashboard.ps1
+.\start-dashboard.ps1 -TrustedAdminIps 'YOUR-ADMIN-IP,127.0.0.1,::1'
 ```
 
 Then open `http://SERVER-IP:8088`. Devices other than the trusted owner IP will see the PulseBridge sign-in page.
@@ -74,7 +73,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 export DASHBOARD_HOST='0.0.0.0'
-export PULSEBRIDGE_ADMIN_IPS='192.168.0.32,127.0.0.1,::1'
+export PULSEBRIDGE_ADMIN_IPS='YOUR-ADMIN-IP,127.0.0.1,::1'
 python app.py
 ```
 
@@ -85,7 +84,7 @@ For a Debian/Ubuntu LXC, use the included `install-lxc.sh`. Complete copy-and-in
 For a Proxmox Community Scripts-style setup, paste this into the Proxmox host:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/ryan551531/pulsebridge/main/proxmox-host-install.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/ryan551531/pulsebridge-private/main/proxmox-host-install.sh)"
 ```
 
 It creates and configures the LXC automatically. The public repository requires

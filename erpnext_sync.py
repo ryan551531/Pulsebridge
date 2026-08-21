@@ -8,6 +8,7 @@ import sys
 import time
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from logging.handlers import RotatingFileHandler
 from pickledb import PickleDB
 from zk import ZK, const
@@ -57,8 +58,15 @@ SINGLE_PUNCH_GRACE_BY_SHIFT = getattr(config, 'SINGLE_PUNCH_GRACE_BY_SHIFT', {})
 IMPORT_START_DATE = getattr(config, 'IMPORT_START_DATE', None)
 IMPORT_END_DATE = getattr(config, 'IMPORT_END_DATE', None)
 RANGE_SYNC = os.getenv('PULSEBRIDGE_RANGE_SYNC') == '1'
+try:
+    REQUESTED_DEVICE_IDS = {
+        str(value) for value in json.loads(os.getenv('PULSEBRIDGE_DEVICE_IDS', '[]')) if str(value)
+    }
+except (TypeError, ValueError, json.JSONDecodeError):
+    REQUESTED_DEVICE_IDS = set()
 TEMP_SHIFT_ASSIGNMENT_CACHE = set()
 PENDING_PUNCH_LOCK = threading.Lock()
+STATUS_LOCK = threading.RLock()
 
 def _erp_headers():
     return {
@@ -595,6 +603,12 @@ def main():
     try:
         last_lift_off_timestamp = _safe_convert_date(status.get('lift_off_timestamp'), "%Y-%m-%d %H:%M:%S.%f")
         if RANGE_SYNC or (last_lift_off_timestamp and last_lift_off_timestamp < datetime.datetime.now() - datetime.timedelta(minutes=config.PULL_FREQUENCY)) or not last_lift_off_timestamp:
+            selected_devices = [
+                device for device in config.devices
+                if not REQUESTED_DEVICE_IDS or str(device.get('device_id')) in REQUESTED_DEVICE_IDS
+            ]
+            if not selected_devices:
+                raise RuntimeError('No matching configured devices were selected for synchronization.')
             status.set('lift_off_timestamp', str(datetime.datetime.now()))
             range_start = _safe_convert_date(IMPORT_START_DATE, "%Y%m%d")
             range_end = _safe_convert_date(IMPORT_END_DATE, "%Y%m%d")
@@ -603,7 +617,7 @@ def main():
             status.set('sync_progress', {
                 'state': 'running', 'from': IMPORT_START_DATE, 'to': IMPORT_END_DATE,
                 'processed': 0, 'uploaded': 0, 'skipped': 0, 'failed': 0,
-                'devices_total': len(config.devices), 'devices_done': 0,
+                'devices_total': len(selected_devices), 'devices_done': 0,
                 'started_at': str(datetime.datetime.now()),
                 'current_device': None,
                 'devices': {
@@ -620,17 +634,15 @@ def main():
                         'from': IMPORT_START_DATE,
                         'to': IMPORT_END_DATE,
                     }
-                    for index, device in enumerate(config.devices)
+                    for index, device in enumerate(selected_devices)
                 },
             })
             status.save()
             info_logger.info("Cleared for lift off!")
-            for device in config.devices:
+            def process_device(device):
                 device_attendance_logs = None
                 info_logger.info("Processing Device: " + device['device_id'])
                 _update_sync_progress(device_id=device['device_id'], device_state='running')
-                progress_before = status.get('sync_progress') or {}
-                failed_before = int(progress_before.get('failed', 0))
                 dump_file = get_dump_file_name_and_directory(device['device_id'], device['ip'])
                 if os.path.exists(dump_file) and not RANGE_SYNC:
                     info_logger.error('Device Attendance Dump Found in Log Directory. This can mean the program crashed unexpectedly. Retrying with dumped data.')
@@ -645,19 +657,23 @@ def main():
                     )
                 try:
                     pull_process_and_push_data(device, device_attendance_logs)
-                    status.set(f'{device["device_id"]}_push_timestamp', str(datetime.datetime.now()))
-                    status.save()
+                    with STATUS_LOCK:
+                        status.set(f'{device["device_id"]}_push_timestamp', str(datetime.datetime.now()))
+                        status.save()
                     if os.path.exists(dump_file):
                         os.remove(dump_file)
                     info_logger.info("Successfully processed Device: " + device['device_id'])
                 except:
-                    progress_after = status.get('sync_progress') or {}
                     _update_sync_progress(
-                        failed=1 if int(progress_after.get('failed', 0)) == failed_before else 0,
+                        failed=1,
                         device_done=True,
                         device_id=device['device_id'],
                     )
                     error_logger.exception('exception when calling pull_process_and_push_data function for device' + json.dumps(device, default=str))
+            with ThreadPoolExecutor(max_workers=min(8, len(selected_devices)), thread_name_prefix='device-sync') as executor:
+                futures = [executor.submit(process_device, device) for device in selected_devices]
+                for future in as_completed(futures):
+                    future.result()
             corrections = reconcile_pending_punches()
             if corrections:
                 info_logger.info(f'Created {len(corrections)} automated single-punch correction(s).')
@@ -839,42 +855,43 @@ def _update_sync_progress(
     device_id=None, current_date=None, records_total=None, device_state=None,
     device_from=None, device_to=None,
 ):
-    progress = status.get('sync_progress') or {}
-    progress['processed'] = int(progress.get('processed', 0)) + processed
-    progress['uploaded'] = int(progress.get('uploaded', 0)) + uploaded
-    progress['skipped'] = int(progress.get('skipped', 0)) + skipped
-    progress['failed'] = int(progress.get('failed', 0)) + failed
-    if device_done:
-        progress['devices_done'] = int(progress.get('devices_done', 0)) + 1
-    if device_id:
-        devices = progress.setdefault('devices', {})
-        device_progress = devices.setdefault(device_id, {
+    with STATUS_LOCK:
+        progress = status.get('sync_progress') or {}
+        progress['processed'] = int(progress.get('processed', 0)) + processed
+        progress['uploaded'] = int(progress.get('uploaded', 0)) + uploaded
+        progress['skipped'] = int(progress.get('skipped', 0)) + skipped
+        progress['failed'] = int(progress.get('failed', 0)) + failed
+        if device_done:
+            progress['devices_done'] = int(progress.get('devices_done', 0)) + 1
+        if device_id:
+            devices = progress.setdefault('devices', {})
+            device_progress = devices.setdefault(device_id, {
             'device_id': device_id, 'state': 'waiting', 'processed': 0,
             'uploaded': 0, 'skipped': 0, 'failed': 0, 'records_total': 0,
         })
-        device_progress['processed'] = int(device_progress.get('processed', 0)) + processed
-        device_progress['uploaded'] = int(device_progress.get('uploaded', 0)) + uploaded
-        device_progress['skipped'] = int(device_progress.get('skipped', 0)) + skipped
-        device_progress['failed'] = int(device_progress.get('failed', 0)) + failed
-        if records_total is not None:
-            device_progress['records_total'] = max(0, int(records_total))
-        if current_date:
-            device_progress['current_date'] = current_date
-        if device_from:
-            device_progress['from'] = device_from
-        if device_to:
-            device_progress['to'] = device_to
-        if device_state:
-            device_progress['state'] = device_state
-        if device_done:
-            device_progress['state'] = 'completed_with_errors' if int(device_progress.get('failed', 0)) else 'completed'
-            device_progress['completed_at'] = str(datetime.datetime.now())
-        elif device_progress.get('state') == 'running':
-            progress['current_device'] = device_id
-        devices[device_id] = device_progress
-        progress['devices'] = devices
-    status.set('sync_progress', progress)
-    status.save()
+            device_progress['processed'] = int(device_progress.get('processed', 0)) + processed
+            device_progress['uploaded'] = int(device_progress.get('uploaded', 0)) + uploaded
+            device_progress['skipped'] = int(device_progress.get('skipped', 0)) + skipped
+            device_progress['failed'] = int(device_progress.get('failed', 0)) + failed
+            if records_total is not None:
+                device_progress['records_total'] = max(0, int(records_total))
+            if current_date:
+                device_progress['current_date'] = current_date
+            if device_from:
+                device_progress['from'] = device_from
+            if device_to:
+                device_progress['to'] = device_to
+            if device_state:
+                device_progress['state'] = device_state
+            if device_done:
+                device_progress['state'] = 'completed_with_errors' if int(device_progress.get('failed', 0)) else 'completed'
+                device_progress['completed_at'] = str(datetime.datetime.now())
+            elif device_progress.get('state') == 'running':
+                progress['current_device'] = device_id
+            devices[device_id] = device_progress
+            progress['devices'] = devices
+        status.set('sync_progress', progress)
+        status.save()
 
 def get_all_attendance_from_device(ip, port=4370, timeout=30, device_id=None, clear_from_device_on_fetch=False):
     # The application runs as an unprivileged service account in Linux/LXC.
@@ -894,9 +911,10 @@ def get_all_attendance_from_device(ip, port=4370, timeout=30, device_id=None, cl
         info_logger.info("\t".join((ip, "Device Disable Attempted. Result:", str(x))))
         attendances = conn.get_attendance()
         info_logger.info("\t".join((ip, "Attendances Fetched:", str(len(attendances)))))
-        status.set(f'{device_id}_push_timestamp', None)
-        status.set(f'{device_id}_pull_timestamp', str(datetime.datetime.now()))
-        status.save()
+        with STATUS_LOCK:
+            status.set(f'{device_id}_push_timestamp', None)
+            status.set(f'{device_id}_pull_timestamp', str(datetime.datetime.now()))
+            status.save()
         if len(attendances):
             dump_file_name = get_dump_file_name_and_directory(device_id, ip)
             with open(dump_file_name, 'w+') as f:

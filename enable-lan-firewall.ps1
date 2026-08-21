@@ -5,5 +5,5 @@ netsh advfirewall firewall add rule name="PulseBridge LAN 8088" dir=in action=al
 
 Write-Host ''
 Write-Host 'PulseBridge is allowed from the local subnet on TCP port 8088.' -ForegroundColor Green
-Write-Host 'Open http://192.168.0.32:8088 from another local-network device.'
+Write-Host 'Open http://YOUR-PC-IP:8088 from another local-network device.'
 Read-Host 'Press Enter to close'

@@ -6,6 +6,7 @@ import ipaddress
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import threading
@@ -80,7 +81,7 @@ class ServiceManager:
                 "started_at": self._started_at if running else None,
             }
 
-    def start(self, once: bool = False) -> dict[str, Any]:
+    def start(self, once: bool = False, device_ids: list[str] | None = None) -> dict[str, Any]:
         if not getattr(sys, "frozen", False) and not SYNC_SCRIPT.exists():
             raise RuntimeError("The sync engine is missing from this installation.")
         if not (ROOT / "local_config.py").exists():
@@ -98,17 +99,20 @@ class ServiceManager:
             console_path = LOG_DIR / "service-console.log"
             _rotate_console_log(console_path)
             output = console_path.open("a", encoding="utf-8")
+            sync_env = {**os.environ, **({"PULSEBRIDGE_RANGE_SYNC": "1"} if once else {})}
+            if device_ids:
+                sync_env["PULSEBRIDGE_DEVICE_IDS"] = json.dumps(device_ids)
             self._process = subprocess.Popen(
                 command,
                 cwd=ROOT,
                 stdout=output,
                 stderr=subprocess.STDOUT,
                 text=True,
-                env={**os.environ, **({"PULSEBRIDGE_RANGE_SYNC": "1"} if once else {})},
+                env=sync_env,
                 **_hidden_subprocess_options(),
             )
             output.close()
-            self._mode = "once" if once else "continuous"
+            self._mode = "device" if device_ids else ("once" if once else "continuous")
             self._started_at = datetime.now().replace(microsecond=0).isoformat(sep=" ")
             return self.status_unlocked()
 
@@ -168,7 +172,7 @@ def _erpnext_health(force: bool = False) -> dict[str, Any]:
 
 
 class DeviceConnectivityMonitor:
-    """Ping configured device IPs in the background every ten minutes."""
+    """Test configured ZKTeco TCP endpoints every ten minutes."""
 
     def __init__(self, interval: int = DEVICE_PING_INTERVAL_SECONDS) -> None:
         self._interval = interval
@@ -181,20 +185,13 @@ class DeviceConnectivityMonitor:
         device_id = str(device.get("device_id", ""))
         ip = str(device.get("ip", ""))
         checked_at = datetime.now().replace(microsecond=0).isoformat(sep=" ")
-        command = ["ping", "-n", "1", "-w", "2000", ip] if os.name == "nt" else ["ping", "-c", "1", "-W", "2", ip]
+        port = int(device.get("port") or 4370)
         try:
-            completed = subprocess.run(
-                command,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=4,
-                check=False,
-                **_hidden_subprocess_options(),
-            )
-            connected = completed.returncode == 0
-        except (OSError, subprocess.TimeoutExpired):
+            with socket.create_connection((ip, port), timeout=4):
+                connected = True
+        except (OSError, ValueError):
             connected = False
-        return device_id, {"connected": connected, "checked_at": checked_at}
+        return device_id, {"connected": connected, "checked_at": checked_at, "port": port}
 
     def refresh(self) -> None:
         devices = load_config(include_secret=False).get("devices", [])
@@ -232,7 +229,7 @@ if os.getenv("PULSEBRIDGE_DISABLE_MONITOR") != "1":
 
 
 TRUSTED_ADMIN_IPS = {
-    item.strip() for item in os.getenv("PULSEBRIDGE_ADMIN_IPS", "192.168.0.32,127.0.0.1,::1").split(",") if item.strip()
+    item.strip() for item in os.getenv("PULSEBRIDGE_ADMIN_IPS", "127.0.0.1,::1").split(",") if item.strip()
 }
 
 
@@ -941,6 +938,17 @@ def api_service(action: str):
         elif action == "run-once":
             state = service.start(once=True)
             message = "A sync cycle was started."
+        elif action == "run-device":
+            payload = request.get_json(silent=True) or {}
+            device_id = str(payload.get("device_id") or "").strip()
+            configured_ids = {
+                str(item.get("device_id") or "")
+                for item in load_config(include_secret=False).get("devices", [])
+            }
+            if not device_id or device_id not in configured_ids:
+                return _json_error("Save this device before synchronizing it.", 400)
+            state = service.start(once=True, device_ids=[device_id])
+            message = f"Attendance sync started for {device_id.replace('_', ' ').title()}."
         elif action == "stop":
             state = service.stop()
             message = "Sync service stopped."

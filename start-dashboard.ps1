@@ -1,3 +1,7 @@
+param(
+    [string]$TrustedAdminIps = '127.0.0.1,::1'
+)
+
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 
@@ -8,7 +12,7 @@ if (-not (Test-Path -LiteralPath '.venv')) {
 & '.\.venv\Scripts\python.exe' -m pip install -r requirements.txt
 
 $env:DASHBOARD_HOST = '0.0.0.0'
-$env:PULSEBRIDGE_ADMIN_IPS = '192.168.0.32,127.0.0.1,::1'
+$env:PULSEBRIDGE_ADMIN_IPS = $TrustedAdminIps
 $server = Start-Process -FilePath '.\.venv\Scripts\python.exe' -ArgumentList '-m', 'waitress', '--listen=0.0.0.0:8088', 'app:app' -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -PassThru
 
 $dashboardUrl = 'http://127.0.0.1:8088'
@@ -33,7 +37,7 @@ if (-not $ready) {
 Start-Process $dashboardUrl
 Write-Host ''
 Write-Host 'PulseBridge is running at http://127.0.0.1:8088' -ForegroundColor Green
-Write-Host 'Local network access: http://192.168.0.32:8088' -ForegroundColor Green
+Write-Host 'Local network access: http://YOUR-PC-IP:8088' -ForegroundColor Green
 Write-Host 'Press Enter to stop the website.'
 Read-Host
 Stop-Process -Id $server.Id -ErrorAction SilentlyContinue
