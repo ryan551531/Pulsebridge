@@ -51,6 +51,95 @@ DEVICE_PING_INTERVAL_SECONDS = 600
 DEVICE_USER_SCAN_TTL_SECONDS = 600
 device_user_scan_cache: dict[str, dict[str, Any]] = {}
 device_user_scan_lock = threading.Lock()
+DEVICE_DISCOVERY_MAX_ADDRESSES = 4096
+DEVICE_DISCOVERY_WORKERS = 32
+device_discovery_lock = threading.Lock()
+device_discovery: dict[str, Any] = {
+    "state": "idle", "networks": [], "total": 0, "scanned": 0,
+    "results": [], "error": None, "started_at": None, "completed_at": None,
+}
+RFC1918_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+)
+
+
+def _is_rfc1918_address(address: ipaddress.IPv4Address) -> bool:
+    return any(address in allowed for allowed in RFC1918_NETWORKS)
+
+
+def _private_ipv4_network(value: str) -> ipaddress.IPv4Network:
+    network = ipaddress.ip_network(value.strip(), strict=False)
+    if not isinstance(network, ipaddress.IPv4Network):
+        raise ValueError("Only IPv4 network ranges are supported.")
+    if not any(network.subnet_of(allowed) for allowed in RFC1918_NETWORKS):
+        raise ValueError("Discovery is limited to private network ranges.")
+    return network
+
+
+def _suggested_device_networks() -> list[str]:
+    suggestions: set[str] = set()
+    for device in load_config(include_secret=False).get("devices", []):
+        try:
+            address = ipaddress.ip_address(str(device.get("ip") or ""))
+            if isinstance(address, ipaddress.IPv4Address) and _is_rfc1918_address(address):
+                suggestions.add(str(ipaddress.ip_network(f"{address}/24", strict=False)))
+        except ValueError:
+            continue
+    if not suggestions:
+        try:
+            for address in socket.gethostbyname_ex(socket.gethostname())[2]:
+                parsed = ipaddress.ip_address(address)
+                if isinstance(parsed, ipaddress.IPv4Address) and _is_rfc1918_address(parsed):
+                    suggestions.add(str(ipaddress.ip_network(f"{parsed}/24", strict=False)))
+        except OSError:
+            pass
+    return sorted(suggestions)
+
+
+def _probe_zkteco(address: str) -> dict[str, Any] | None:
+    """Confirm port 4370 with a real ZKTeco protocol connection."""
+    from zk import ZK
+
+    connection = None
+    try:
+        connection = ZK(address, port=4370, timeout=2, ommit_ping=True).connect()
+        name = connection.get_device_name() or "ZKTeco terminal"
+        return {"ip": address, "name": str(name), "port": 4370}
+    except Exception:
+        return None
+    finally:
+        if connection is not None:
+            try:
+                connection.disconnect()
+            except Exception:
+                pass
+
+
+def _run_device_discovery(networks: list[ipaddress.IPv4Network]) -> None:
+    addresses = [str(address) for network in networks for address in network.hosts()]
+    configured = {
+        str(device.get("ip") or "").strip()
+        for device in load_config(include_secret=False).get("devices", [])
+    }
+    try:
+        with ThreadPoolExecutor(max_workers=min(DEVICE_DISCOVERY_WORKERS, len(addresses) or 1)) as executor:
+            for address, result in zip(addresses, executor.map(_probe_zkteco, addresses)):
+                with device_discovery_lock:
+                    device_discovery["scanned"] += 1
+                    if result:
+                        result["configured"] = address in configured
+                        device_discovery["results"].append(result)
+        with device_discovery_lock:
+            device_discovery["state"] = "completed"
+            device_discovery["completed_at"] = datetime.now().isoformat(timespec="seconds")
+    except Exception as exc:
+        app.logger.exception("ZKTeco network discovery failed")
+        with device_discovery_lock:
+            device_discovery["state"] = "failed"
+            device_discovery["error"] = str(exc)
+            device_discovery["completed_at"] = datetime.now().isoformat(timespec="seconds")
 
 
 def _hidden_subprocess_options() -> dict[str, Any]:
@@ -1057,6 +1146,47 @@ def test_device():
         return _json_error("Enter a valid private device IP address.")
     except Exception:
         return _json_error(f"Could not connect to the biometric device at {ip}.", 502)
+
+
+@app.get("/api/devices/discovery")
+def device_discovery_status():
+    denied = _require_admin()
+    if denied:
+        return denied
+    with device_discovery_lock:
+        status = dict(device_discovery)
+        status["results"] = [dict(item) for item in device_discovery["results"]]
+    return jsonify({"ok": True, "suggested_networks": _suggested_device_networks(), **status})
+
+
+@app.post("/api/devices/discovery")
+def start_device_discovery():
+    denied = _require_admin()
+    if denied:
+        return denied
+    payload = request.get_json(silent=True) or {}
+    submitted = payload.get("networks") or _suggested_device_networks()
+    if isinstance(submitted, str):
+        submitted = [item.strip() for item in submitted.split(",") if item.strip()]
+    if not isinstance(submitted, list) or not submitted:
+        return _json_error("Enter at least one private network range, such as 192.168.0.0/24.")
+    try:
+        networks = list(dict.fromkeys(_private_ipv4_network(str(item)) for item in submitted))
+    except ValueError as exc:
+        return _json_error(str(exc))
+    total = sum(network.num_addresses if network.prefixlen >= 31 else network.num_addresses - 2 for network in networks)
+    if total > DEVICE_DISCOVERY_MAX_ADDRESSES:
+        return _json_error(f"Discovery is limited to {DEVICE_DISCOVERY_MAX_ADDRESSES:,} addresses per scan.")
+    with device_discovery_lock:
+        if device_discovery["state"] == "running":
+            return _json_error("A ZKTeco discovery scan is already running.", 409)
+        device_discovery.update({
+            "state": "running", "networks": [str(item) for item in networks],
+            "total": total, "scanned": 0, "results": [], "error": None,
+            "started_at": datetime.now().isoformat(timespec="seconds"), "completed_at": None,
+        })
+    threading.Thread(target=_run_device_discovery, args=(networks,), daemon=True, name="zkteco-discovery").start()
+    return jsonify({"ok": True, "message": f"Scanning {len(networks)} private network range{'s' if len(networks) != 1 else ''} for ZKTeco terminals."}), 202
 
 
 @app.post("/api/devices/time-sync")

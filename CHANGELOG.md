@@ -13,6 +13,9 @@ All notable PulseBridge changes are recorded here.
   populated from the host's compatible active storage targets.
 - Fresh LXC installations now enable continuous synchronization by default;
   the sync watchdog starts it automatically after configuration is saved.
+- Added automatic ZKTeco terminal discovery for private network ranges. The
+  scanner checks only port 4370, confirms devices through the ZK protocol, and
+  leaves every discovered terminal pending for administrator review.
 
 ### Fixed
 

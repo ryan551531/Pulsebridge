@@ -321,6 +321,19 @@ tbody tr:last-child td { border-bottom: 0; }
 .empty-cell { padding: 28px; color: var(--muted); text-align: center; }
 
 .device-editor { display: grid; gap: 12px; }
+.discovery-card { margin-bottom: 12px; padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+.discovery-head { margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.discovery-head h3 { margin: 0; font-family: Georgia, serif; font-size: 24px; font-weight: 500; }
+.discovery-head p:last-child { margin: 7px 0 0; color: var(--muted); font-size: 12px; }
+.discovery-progress { margin-top: 14px; }
+.discovery-progress > div:first-child { margin-bottom: 7px; display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10px; }
+.progress-track { height: 7px; overflow: hidden; border-radius: 99px; background: var(--line); }
+.progress-track i { width: 0; height: 100%; display: block; border-radius: inherit; background: linear-gradient(90deg, var(--green), var(--lime)); transition: width .3s ease; }
+.discovery-results { margin-top: 12px; display: grid; gap: 7px; }
+.discovery-result { padding: 10px 12px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--soft); }
+.discovery-result strong, .discovery-result small { display: block; }
+.discovery-result small { margin-top: 2px; color: var(--muted); font-size: 9px; }
+.configured-badge { padding: 6px 8px; border-radius: 99px; color: var(--green); background: color-mix(in srgb, var(--green) 10%, var(--card)); font-size: 9px; }
 .device-sync-toolbar { margin-bottom: 12px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
 .device-sync-toolbar strong, .device-sync-toolbar span { display: block; }
 .device-sync-toolbar strong { color: var(--green); font-size: 12px; }
@@ -504,6 +517,7 @@ body[data-mode="dark"] input[type="date"] { color-scheme: dark; }
   .row-actions { grid-column: auto; }
   .sticky-save { align-items: flex-start; gap: 14px; flex-direction: column; }
   .clock-control { align-items: flex-start; flex-direction: column; }
+  .discovery-head { align-items: flex-start; flex-direction: column; }
   .correction-banner, .location-correction-head { align-items: flex-start; flex-direction: column; }
   .correction-range-card { grid-template-columns: 1fr; }
   .location-toggle-grid { grid-template-columns: 1fr; }

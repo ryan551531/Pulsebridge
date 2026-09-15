@@ -3,6 +3,8 @@ const configFormState = { hydrated: false, dirty: false };
 let newDeviceSequence = 0;
 let themeApplySequence = 0;
 let syncProgressPollBusy = false;
+let discoveryPollTimer = null;
+let discoveryLoaded = false;
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
@@ -329,6 +331,49 @@ function renderDevices(devices) {
   updateDeviceSelection();
 }
 
+function suggestedDeviceId(result) {
+  const model = String(result.name || "zkteco").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  return `${model || "zkteco"}_${String(result.ip).split(".").pop()}`;
+}
+
+function addDiscoveredDevice(result) {
+  const row = deviceRow({ device_id: suggestedDeviceId(result), ip: result.ip, punch_direction: "AUTO" }, { isNew: true });
+  $("#deviceEditor").prepend(row);
+  configFormState.dirty = true;
+  row.scrollIntoView({ behavior: "smooth", block: "center" });
+  $('[data-key="shift"]', row).focus();
+  showToast(`${result.name} added for review. Choose its shift, then save.`);
+}
+
+function renderDiscovery(data) {
+  const total = Number(data.total || 0);
+  const scanned = Number(data.scanned || 0);
+  const percent = total ? Math.min(100, Math.round(scanned / total * 100)) : 0;
+  $("#discoveryProgress").hidden = data.state === "idle";
+  $("#discoveryPercent").textContent = `${percent}%`;
+  $("#discoveryProgressBar").style.width = `${percent}%`;
+  const found = (data.results || []).length;
+  $("#discoveryLabel").textContent = data.state === "running"
+    ? `Checking ${scanned.toLocaleString()} of ${total.toLocaleString()} addresses · ${found} terminal${found === 1 ? "" : "s"} found`
+    : data.state === "failed" ? `Scan failed · ${data.error || "Unknown error"}`
+      : `Scan complete · ${found} terminal${found === 1 ? "" : "s"} found`;
+  const results = $("#discoveryResults");
+  results.innerHTML = (data.results || []).map((result, index) => `
+    <div class="discovery-result"><span class="status-dot online"></span><div><strong>${escapeHtml(result.name)}</strong><small>${escapeHtml(result.ip)} · ZKTeco port ${Number(result.port || 4370)}</small></div>
+    ${result.configured ? '<b class="configured-badge">Already configured</b>' : `<button class="button ghost" data-add-discovered="${index}">Add device</button>`}</div>`).join("");
+  $$('[data-add-discovered]', results).forEach((button) => button.addEventListener("click", () => addDiscoveredDevice(data.results[Number(button.dataset.addDiscovered)])));
+}
+
+async function pollDiscovery() {
+  clearTimeout(discoveryPollTimer);
+  try {
+    const data = await api("/api/devices/discovery");
+    renderDiscovery(data);
+    if (!$("#discoveryNetworks").value && data.suggested_networks?.length) $("#discoveryNetworks").value = data.suggested_networks.join(", ");
+    if (data.state === "running") discoveryPollTimer = setTimeout(pollDiscovery, 750);
+  } catch (error) { showToast(error.message, true); }
+}
+
 function updateDeviceSelection() {
   const selected = $$('[data-sync-select]:checked', $("#deviceEditor"));
   $("#selectedDeviceCount").textContent = `${selected.length} location${selected.length === 1 ? "" : "s"} selected`;
@@ -404,6 +449,10 @@ async function loadState(notify = false) {
     state.status = data.status;
     state.devices = data.devices;
     renderBranding(data.branding, data.auth);
+    if (data.auth?.user?.role === "admin" && !discoveryLoaded) {
+      discoveryLoaded = true;
+      pollDiscovery();
+    }
     renderDashboard(data);
     const preservedEdits = configFormState.dirty;
     // The configuration form is populated once when the page opens. Live
@@ -982,6 +1031,18 @@ $("#addDeviceButton").addEventListener("click", () => {
   configFormState.dirty = true;
   row.scrollIntoView({ behavior: "smooth", block: "center" });
   $('[data-key="device_id"]', row).focus();
+});
+$("#discoverDevicesButton").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const networks = $("#discoveryNetworks").value.split(",").map((item) => item.trim()).filter(Boolean);
+  button.disabled = true;
+  button.textContent = "Starting scan…";
+  try {
+    const result = await api("/api/devices/discovery", { method: "POST", body: JSON.stringify({ networks }) });
+    showToast(result.message);
+    await pollDiscovery();
+  } catch (error) { showToast(error.message, true); }
+  finally { button.disabled = false; button.textContent = "Scan saved networks"; }
 });
 $("#configForm").addEventListener("input", () => { configFormState.dirty = true; });
 $("#configForm").addEventListener("change", () => { configFormState.dirty = true; });

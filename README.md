@@ -10,6 +10,8 @@ This project wraps the existing ERPNext biometric attendance sync engine in a br
 
 - ERPNext connection and API credential management
 - Add, remove, edit, and test biometric devices
+- Discover ZKTeco terminals across selected private network ranges using a real
+  port 4370 protocol handshake, then review each result before adding it
 - Preserve and edit custom automatic shift-detection logic
 - Run a sync cycle from the browser
 - Continuous sync service controls

@@ -192,6 +192,15 @@
           <div><p class="eyebrow">TERMINALS</p><h2>Biometric devices</h2><p>Add each ZKTeco-compatible terminal reachable from this server.</p></div>
           <button class="button primary" id="addDeviceButton">+ Add device</button>
         </div>
+        <div class="discovery-card admin-only">
+          <div class="discovery-head">
+            <div><p class="eyebrow">ZKTECO DISCOVERY</p><h3>Find terminals on the network</h3><p>PulseBridge checks only private addresses on ZKTeco port 4370 and confirms each terminal with the ZK protocol.</p></div>
+            <button class="button primary" id="discoverDevicesButton">Scan saved networks</button>
+          </div>
+          <div class="field"><label for="discoveryNetworks">Private network ranges</label><input id="discoveryNetworks" placeholder="192.168.0.0/24, 192.168.8.0/24"></div>
+          <div class="discovery-progress" id="discoveryProgress" hidden><div><strong id="discoveryLabel">Preparing scan…</strong><span id="discoveryPercent">0%</span></div><div class="progress-track"><i id="discoveryProgressBar"></i></div></div>
+          <div class="discovery-results" id="discoveryResults" aria-live="polite"></div>
+        </div>
         <div class="clock-control">
           <div><p class="eyebrow">CLOCK CONTROL</p><h3>ZKTeco device time</h3><p>PC time is authoritative. Manual sync sets every reachable terminal to this computer's local time.</p></div>
           <button class="button primary" id="syncAllClocksButton">Sync all device clocks</button>
