@@ -170,6 +170,40 @@ def _get_employee_by_attendance_device_id(attendance_device_id):
         EMPLOYEE_LOOKUP_CACHE[cache_key] = employee
     return employee
 
+def _get_employee_by_name(employee_name):
+    cache_key = f'name::{employee_name}'
+    with ERP_CACHE_LOCK:
+        if cache_key in EMPLOYEE_LOOKUP_CACHE:
+            return EMPLOYEE_LOOKUP_CACHE[cache_key]
+    employees = _erp_get('/api/resource/Employee', params={
+        'fields': json.dumps(['name', 'default_shift', 'attendance_device_id', 'company']),
+        'filters': json.dumps([['name', '=', employee_name]]),
+        'limit_page_length': 1,
+    })
+    employee = employees[0] if employees else None
+    with ERP_CACHE_LOCK:
+        EMPLOYEE_LOOKUP_CACHE[cache_key] = employee
+    return employee
+
+def _get_rostered_shift_for_date(employee_name, punch_date):
+    """Return a submitted assignment covering a historical date, regardless of current status."""
+    date_str = punch_date.strftime('%Y-%m-%d')
+    assignments = _erp_get('/api/resource/Shift Assignment', params={
+        'fields': json.dumps(['name', 'shift_type', 'start_date', 'end_date']),
+        'filters': json.dumps([
+            ['employee', '=', employee_name],
+            ['docstatus', '=', 1],
+            ['start_date', '<=', date_str],
+        ]),
+        'or_filters': json.dumps([
+            ['end_date', '>=', date_str],
+            ['end_date', 'is', 'not set'],
+        ]),
+        'order_by': 'start_date desc',
+        'limit_page_length': 1,
+    })
+    return assignments[0].get('shift_type') if assignments else None
+
 def _get_active_shift_assignment(employee_name, punch_date):
     with ERP_CACHE_LOCK:
         assignments = SHIFT_ASSIGNMENT_CACHE.get(employee_name)
@@ -1007,6 +1041,92 @@ def send_to_erpnext(employee_field_value, timestamp, device_id=None, log_type=No
             error_logger.error('\t'.join(['Error during ERPNext API Call.', str(employee_field_value), str(timestamp.timestamp()), str(device_id), str(log_type), error_str]))
         return response.status_code, error_str
 
+def repair_existing_offshift_checkins(date_from, date_to, device_ids=None):
+    """Assign missing roster context, then ask HRMS to recalculate existing Off-Shift check-ins."""
+    configured_devices = {
+        str(device.get('device_id')): device for device in getattr(config, 'devices', [])
+    }
+    requested_devices = set(device_ids or configured_devices)
+    checkins = _erp_get('/api/resource/Employee Checkin', params={
+        'fields': json.dumps(['name', 'employee', 'employee_name', 'time', 'device_id', 'log_type', 'shift', 'offshift']),
+        'filters': json.dumps([
+            ['offshift', '=', 1],
+            ['time', '>=', f'{date_from} 00:00:00'],
+            ['time', '<=', f'{date_to} 23:59:59'],
+            ['device_id', 'in', sorted(requested_devices)],
+        ]),
+        'order_by': 'time asc',
+        'limit_page_length': 5000,
+    })
+    prepared = []
+    unresolved = []
+    assignments_created = 0
+    for checkin in checkins:
+        try:
+            employee = _get_employee_by_name(checkin.get('employee'))
+            punch_dt = datetime.datetime.fromisoformat(str(checkin.get('time')))
+            device = configured_devices.get(str(checkin.get('device_id'))) or {
+                'device_id': checkin.get('device_id'), 'ip': '', 'punch_direction': 'AUTO'
+            }
+            rostered_shift = _get_rostered_shift_for_date(employee['name'], punch_dt.date()) if employee else None
+            chosen_shift = rostered_shift
+            if not chosen_shift:
+                chosen_shift = _infer_shift_from_time(device, punch_dt, raw_hint=checkin.get('log_type'))
+                if not chosen_shift and employee:
+                    chosen_shift = employee.get('default_shift')
+                if not chosen_shift:
+                    chosen_shift = DEVICE_DEFAULT_SHIFT.get(device.get('ip')) or DEVICE_DEFAULT_SHIFT.get(device.get('device_id'))
+                if chosen_shift and employee:
+                    assignment_date, _, _ = _shift_occurrence(chosen_shift, punch_dt)
+                    before = len(TEMP_SHIFT_ASSIGNMENT_CACHE)
+                    if not _ensure_temporary_shift_assignment(employee, chosen_shift, assignment_date):
+                        raise RuntimeError(f'Shift Assignment could not be confirmed for {chosen_shift}.')
+                    assignments_created += int(len(TEMP_SHIFT_ASSIGNMENT_CACHE) > before)
+            if not chosen_shift:
+                raise RuntimeError('No roster, default shift, or punch-time shift match was found.')
+            prepared.append(checkin['name'])
+        except Exception as exc:
+            unresolved.append({'name': checkin.get('name'), 'employee': checkin.get('employee_name') or checkin.get('employee'), 'reason': str(exc)})
+
+    endpoint_app = 'hrms' if ERPNEXT_VERSION > 13 else 'erpnext'
+    bulk_url = f'{config.ERPNEXT_URL}/api/method/{endpoint_app}.hr.doctype.employee_checkin.employee_checkin.bulk_fetch_shift'
+    requested = 0
+    for index in range(0, len(prepared), 50):
+        batch = prepared[index:index + 50]
+        response = _http_session().post(bulk_url, json={'checkins': batch}, timeout=90)
+        if response.status_code != 200:
+            reason = _safe_get_error_str(response)
+            unresolved.extend({'name': name, 'employee': '', 'reason': reason} for name in batch)
+            continue
+        requested += len(batch)
+
+    repaired = 0
+    still_offshift = []
+    for index in range(0, len(prepared), 100):
+        batch = prepared[index:index + 100]
+        refreshed = _erp_get('/api/resource/Employee Checkin', params={
+            'fields': json.dumps(['name', 'employee_name', 'shift', 'offshift']),
+            'filters': json.dumps([['name', 'in', batch]]),
+            'limit_page_length': len(batch),
+        })
+        for item in refreshed:
+            if not item.get('offshift') and item.get('shift'):
+                repaired += 1
+            else:
+                still_offshift.append({'name': item.get('name'), 'employee': item.get('employee_name'), 'reason': 'ERPNext still found the punch outside the Shift Type check-in/out window.'})
+
+    result = {
+        'found': len(checkins), 'prepared': len(prepared), 'reprocessed': requested,
+        'repaired': repaired, 'assignments_created': assignments_created,
+        'unresolved': unresolved + still_offshift,
+    }
+    correction_logger.info('\t'.join([
+        'OFFSHIFT-REPAIR', str(date_from), str(date_to),
+        f"found={result['found']}", f"repaired={repaired}",
+        f"unresolved={len(result['unresolved'])}",
+    ]))
+    return result
+
 def update_shift_last_sync_timestamp(shift_type_device_mapping):
     for shift_type_device_map in shift_type_device_mapping:
         all_devices_pushed = True
@@ -1121,7 +1241,12 @@ def infinite_loop(sleep_time=15):
             print(e)
 
 if __name__ == "__main__":
-    if len(sys.argv) >= 4 and sys.argv[1] == '--correct-range':
+    if len(sys.argv) >= 4 and sys.argv[1] == '--repair-offshift':
+        range_from = datetime.datetime.strptime(sys.argv[2], '%Y-%m-%d').date()
+        range_to = datetime.datetime.strptime(sys.argv[3], '%Y-%m-%d').date()
+        selected_devices = set(json.loads(sys.argv[4])) if len(sys.argv) >= 5 else None
+        print(json.dumps(repair_existing_offshift_checkins(range_from, range_to, selected_devices), default=str))
+    elif len(sys.argv) >= 4 and sys.argv[1] == '--correct-range':
         range_from = datetime.datetime.strptime(sys.argv[2], '%Y-%m-%d').date()
         range_to = datetime.datetime.strptime(sys.argv[3], '%Y-%m-%d').date()
         selected_devices = set(json.loads(sys.argv[4])) if len(sys.argv) >= 5 else None

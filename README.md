@@ -21,6 +21,8 @@ This project wraps the existing ERPNext biometric attendance sync engine in a br
 - Workforce tab with active employee totals overall and by ERPNext Branch
 - Automatic shift assignment before each inferred punch to prevent new Off-Shift check-ins
 - Auditable single-punch correction after a configurable shift grace period
+- Roster-first repair of existing ERPNext Off-Shift records without changing
+  the original punch times
 - Corrections tab showing pending unmatched punches, issued corrections, and ERPNext Auto Attendance status
 - Master automatic-correction switch plus independent ON/OFF control for every location
 - Automatic PC-to-ZKTeco clock synchronization during attendance pulls
@@ -28,6 +30,7 @@ This project wraps the existing ERPNext biometric attendance sync engine in a br
 - Recent activity, error, and console logs
 - Allowed ERPNext responses such as duplicate punches advance the device checkpoint without inflating the Needs attention total
 - Responsive interface for desktop, tablet, and mobile
+- Illustrated in-app How to guide and advanced-setting reference
 
 This working PC copy preserves the existing `local_config.py`. Keep that file private because it contains the live ERPNext API secret; deployment packages should omit it and be configured after installation.
 

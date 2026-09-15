@@ -309,6 +309,45 @@ input:focus, select:focus, textarea:focus { border-color: var(--green); box-shad
 .correction-range-card > div span { margin-top: 5px; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .correction-range-card label { display: grid; gap: 6px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
 .correction-range-card input { height: 42px; }
+.offshift-repair-card { margin: 16px 0 24px; padding: 20px; display: grid; grid-template-columns: 110px minmax(280px, 1fr) 150px 150px auto; align-items: end; gap: 16px; border: 1px solid color-mix(in srgb, var(--red) 35%, var(--line)); border-radius: 14px; background: var(--card); }
+.repair-visual { align-self: center; }
+.repair-visual svg { width: 100%; fill: none; stroke: var(--muted); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.repair-visual .repair-arrow { stroke: var(--red); }
+.repair-copy h3 { margin: 0; font-family: Georgia, serif; font-size: 22px; font-weight: 500; }
+.repair-copy p:last-child { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.repair-locations { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 7px; }
+.repair-locations label { min-height: 34px; padding: 0 10px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--soft); cursor: pointer; text-transform: none; }
+.repair-locations input { width: 15px; margin: 0; accent-color: var(--green); }
+.offshift-repair-card label { color: var(--muted); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.offshift-repair-card input { margin-top: 6px; }
+.repair-results { grid-column: 1 / -1; padding: 14px; border-radius: 10px; background: var(--soft); }
+.repair-results > strong, .repair-results > span { display: block; }
+.repair-results > span { margin-top: 4px; color: var(--muted); font-size: 10px; }
+.repair-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.repair-metrics span { padding: 10px; border-radius: 8px; color: var(--muted); background: var(--card); font-size: 9px; }
+.repair-metrics b { display: block; color: var(--ink); font-size: 20px; }
+.repair-metrics .success b { color: var(--green); }
+.repair-metrics .failed b { color: var(--red); }
+.repair-results details { margin-top: 12px; }
+.repair-unresolved { max-height: 260px; overflow: auto; }
+.repair-unresolved p { padding: 8px 0; margin: 0; border-bottom: 1px solid var(--line); }
+.repair-unresolved strong, .repair-unresolved span { display: block; }
+.repair-unresolved span { margin-top: 2px; color: var(--muted); font-size: 9px; }
+.help-hero { margin-bottom: 18px; padding: 24px; display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 18px; border-radius: 16px; color: #fff; background: linear-gradient(135deg, var(--sidebar), var(--green)); }
+.help-hero div { display: flex; align-items: center; gap: 12px; }
+.help-hero span { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.3); border-radius: 50%; color: var(--lime); font-size: 10px; }
+.help-hero i { width: 38px; height: 2px; background: var(--lime); }
+.help-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.help-card { padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+.help-card h3, .settings-guide h3 { margin: 0; font-family: Georgia, serif; font-size: 22px; font-weight: 500; }
+.help-card ol { margin: 13px 0 0; padding-left: 18px; color: var(--muted); font-size: 10px; line-height: 1.65; }
+.help-picture { height: 112px; margin: -6px -4px 16px; padding: 7px; border-radius: 10px; background: var(--soft); }
+.help-picture svg { width: 100%; height: 100%; fill: none; stroke: var(--green); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.help-picture svg .accent { stroke: var(--lime); stroke-width: 5; }
+.help-picture svg .accent-fill { fill: var(--green); }
+.help-picture svg .white { stroke: #fff; }
+.settings-guide { margin-top: 18px; padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+.settings-guide .table-card { margin-top: 16px; }
 .table-card { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
 .pending-table-card { max-height: 939px; overflow: auto; }
 .pending-table-card thead th { position: sticky; top: 0; z-index: 1; box-shadow: 0 1px 0 var(--line); }
@@ -520,5 +559,13 @@ body[data-mode="dark"] input[type="date"] { color-scheme: dark; }
   .discovery-head { align-items: flex-start; flex-direction: column; }
   .correction-banner, .location-correction-head { align-items: flex-start; flex-direction: column; }
   .correction-range-card { grid-template-columns: 1fr; }
+  .offshift-repair-card { grid-template-columns: 1fr 1fr; }
+  .repair-visual, .repair-copy, .repair-results { grid-column: 1 / -1; }
+  .help-grid { grid-template-columns: 1fr 1fr; }
   .location-toggle-grid { grid-template-columns: 1fr; }
+  .help-grid, .repair-metrics { grid-template-columns: 1fr; }
+  .help-hero { grid-template-columns: 1fr; }
+  .help-hero i { width: 2px; height: 22px; margin-left: 16px; }
+  .offshift-repair-card { grid-template-columns: 1fr; }
+  .offshift-repair-card > * { grid-column: 1; }
 }

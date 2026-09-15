@@ -31,6 +31,14 @@ All notable PulseBridge changes are recorded here.
 - The interactive installer now exits with clear guidance if it is incorrectly
   invoked through a `curl` pipe, preventing script input from being consumed as
   a dashboard password.
+- Added a roster-first repair workflow for existing ERPNext Off-Shift check-ins.
+  It preserves real punch times, uses HRMS bulk Fetch Shift, verifies the result,
+  and reports records that remain outside ERPNext Shift Type windows.
+
+### Added
+
+- Added an in-app How to page with illustrated setup, synchronization, device,
+  employee, correction, maintenance, and setting-reference guidance.
 
 ## 2026-08-21
 

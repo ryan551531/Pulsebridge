@@ -95,7 +95,7 @@ function displayName(value) {
 function goTo(view) {
   $$(".view").forEach((el) => el.classList.toggle("active", el.id === `view-${view}`));
   $$(".nav-link").forEach((el) => el.classList.toggle("active", el.dataset.view === view));
-  const titles = { dashboard: "Dashboard", workforce: "Workforce", "device-users": "Device users", corrections: "Punch corrections", configuration: "Connection settings", devices: "Device network", logs: "Activity history", admin: "Administration" };
+  const titles = { dashboard: "Dashboard", workforce: "Workforce", "device-users": "Device users", corrections: "Punch corrections", configuration: "Connection settings", devices: "Device network", logs: "Activity history", help: "How to use PulseBridge", admin: "Administration" };
   $("#pageTitle").textContent = titles[view];
   if (view === "logs") loadLogs();
   if (view === "corrections") loadCorrections();
@@ -904,6 +904,8 @@ async function loadCorrections() {
     const result = await api("/api/corrections");
     state.corrections = result;
     initializeCorrectionRange(result.pending || []);
+    if (!$("#offshiftFromDate").value) $("#offshiftFromDate").value = $("#correctionFromDate").value || state.config?.import_start_date?.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3") || "";
+    if (!$("#offshiftToDate").value) $("#offshiftToDate").value = $("#correctionToDate").value || new Date().toISOString().slice(0, 10);
     $("#correctionState").textContent = result.enabled ? "Automatic correction is enabled" : "Automatic correction is disabled";
     $("#correctionOverallToggle").checked = result.enabled;
     $("#locationCorrectionToggles").innerHTML = result.locations.map((location) => `
@@ -911,6 +913,8 @@ async function loadCorrections() {
         <span><strong>${escapeHtml(displayName(location.device_id))}</strong><small>${escapeHtml(location.ip)}</small></span>
         <span class="toggle-control"><input type="checkbox" data-correction-location="${escapeAttr(location.device_id)}" ${location.enabled ? "checked" : ""}><span class="toggle-track"></span><b>${location.enabled ? "ON" : "OFF"}</b></span>
       </label>`).join("");
+    if (!$("#offshiftLocations").children.length) $("#offshiftLocations").innerHTML = result.locations.map((location) => `
+      <label><input type="checkbox" data-repair-location="${escapeAttr(location.device_id)}" checked><span>${escapeHtml(displayName(location.device_id))}</span></label>`).join("");
     $$('[data-correction-location]').forEach((input) => input.addEventListener("change", () => {
       input.parentElement.querySelector("b").textContent = input.checked ? "ON" : "OFF";
       renderPendingCorrections();
@@ -922,6 +926,36 @@ async function loadCorrections() {
     $("#correctionHistory").textContent = result.history.length ? result.history.join("\n") : "No automated corrections have been issued yet.";
     if (disabled.length) $("#correctionState").textContent += ` · ${disabled.length} ERPNext shift${disabled.length === 1 ? " has" : "s have"} Auto Attendance off`;
   } catch (error) { showToast(error.message, true); }
+}
+
+async function repairExistingOffshift(event) {
+  const button = event.currentTarget;
+  const from = $("#offshiftFromDate").value;
+  const to = $("#offshiftToDate").value;
+  const locations = $$('[data-repair-location]:checked').map((input) => input.dataset.repairLocation);
+  if (!from || !to) { showToast("Choose both Off-Shift repair dates.", true); return; }
+  if (to < from) { showToast("The repair Through date cannot be earlier than From date.", true); return; }
+  if (!locations.length) { showToast("Select at least one enabled location above.", true); return; }
+  if (!confirm(`Reprocess existing Off-Shift records from ${from} through ${to} for ${locations.length} location${locations.length === 1 ? "" : "s"}? Real punch times will not be changed.`)) return;
+  button.disabled = true;
+  button.textContent = "Repairing…";
+  const output = $("#offshiftRepairResults");
+  output.hidden = false;
+  output.innerHTML = "<strong>Repair running</strong><span>Checking rosters, assignments, and ERPNext shift windows…</span>";
+  try {
+    const result = await api("/api/corrections/repair-offshift", { method: "POST", body: JSON.stringify({ from, to, locations }) });
+    const unresolved = result.unresolved || [];
+    output.innerHTML = `<div class="repair-metrics"><span><b>${Number(result.found || 0)}</b>Found</span><span class="success"><b>${Number(result.repaired || 0)}</b>Repaired</span><span><b>${Number(result.assignments_created || 0)}</b>Assignments confirmed</span><span class="failed"><b>${Number(result.unresolved_count || 0)}</b>Unresolved</span></div>
+      ${unresolved.length ? `<details><summary>Review unresolved records</summary><div class="repair-unresolved">${unresolved.map((item) => `<p><strong>${escapeHtml(item.employee || item.name || "Unknown")}</strong><span>${escapeHtml(item.name || "")} · ${escapeHtml(item.reason || "ERPNext did not accept a shift")}</span></p>`).join("")}</div></details>` : "<p>All selected Off-Shift records were repaired.</p>"}`;
+    showToast(result.message, Boolean(result.unresolved_count));
+    await loadCorrections();
+  } catch (error) {
+    output.innerHTML = `<strong>Repair could not finish</strong><span>${escapeHtml(error.message)}</span>`;
+    showToast(error.message, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Repair Off-Shift records";
+  }
 }
 
 function renderPendingCorrections() {
@@ -1084,6 +1118,7 @@ $("#saveCorrectionSettings").addEventListener("click", saveCorrectionSettings);
 $("#correctionFromDate").addEventListener("change", renderPendingCorrections);
 $("#correctionToDate").addEventListener("change", renderPendingCorrections);
 $("#runCorrectionRange").addEventListener("click", runCorrectionRange);
+$("#repairOffshiftButton").addEventListener("click", repairExistingOffshift);
 $("#correctionOverallToggle").addEventListener("change", (event) => {
   $("#correctionState").textContent = event.currentTarget.checked ? "Automatic correction will be enabled after saving" : "Automatic correction will be disabled after saving";
   renderPendingCorrections();

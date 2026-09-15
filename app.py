@@ -1567,6 +1567,49 @@ def api_run_correction_range():
     })
 
 
+@app.post("/api/corrections/repair-offshift")
+def api_repair_offshift():
+    denied = _require_admin()
+    if denied:
+        return denied
+    payload = request.get_json(force=True) or {}
+    try:
+        date_from = datetime.strptime(str(payload.get("from") or ""), "%Y-%m-%d").date()
+        date_to = datetime.strptime(str(payload.get("to") or ""), "%Y-%m-%d").date()
+    except ValueError:
+        return _json_error("Choose valid From and Through dates.")
+    if date_to < date_from:
+        return _json_error("The Through date cannot be earlier than the From date.")
+    if (date_to - date_from).days > 366:
+        return _json_error("Off-Shift repair is limited to 366 days at a time.")
+    if service.status().get("running"):
+        return _json_error("Stop continuous synchronization before repairing existing Off-Shift records.", 409)
+    config = load_config(include_secret=False)
+    known = {str(item.get("device_id") or "") for item in config.get("devices", [])}
+    selected = sorted(known.intersection(str(item) for item in (payload.get("locations") or [])))
+    if not selected:
+        return _json_error("Select at least one configured location.")
+    command = [sys.executable, str(SYNC_SCRIPT), "--repair-offshift", date_from.isoformat(), date_to.isoformat(), json.dumps(selected)]
+    try:
+        completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=900, check=False, **_hidden_subprocess_options())
+        if completed.returncode != 0:
+            app.logger.error("Off-Shift repair failed: %s", completed.stderr[-4000:])
+            return _json_error("Off-Shift repair failed. Review Activity logs for details.", 502)
+        result_line = next((line for line in reversed(completed.stdout.splitlines()) if line.strip().startswith("{")), "{}")
+        result = json.loads(result_line)
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        app.logger.exception("Off-Shift repair process failed.")
+        return _json_error("Off-Shift repair could not finish. Review Activity logs for details.", 502)
+    unresolved = result.get("unresolved") or []
+    return jsonify({
+        "ok": True,
+        "message": f"Off-Shift repair completed: {int(result.get('repaired') or 0)} of {int(result.get('found') or 0)} records repaired.",
+        **result,
+        "unresolved_count": len(unresolved),
+        "unresolved": unresolved[:200],
+    })
+
+
 if __name__ == "__main__":
     host = os.getenv("DASHBOARD_HOST", "127.0.0.1")
     port = int(os.getenv("DASHBOARD_PORT", "8088"))

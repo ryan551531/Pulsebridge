@@ -7,7 +7,7 @@
   <meta name="author" content="ryan55">
   <title>PulseBridge · ERPNext Biometric Sync</title>
   <link rel="icon" id="appFavicon" href="data:,">
-  <link rel="stylesheet" href="/static/app.css?v=20260818-9">
+  <link rel="stylesheet" href="/static/app.css?v=20260915-1">
 </head>
 <body>
   <div class="shell">
@@ -24,6 +24,7 @@
         <button class="nav-link" data-view="configuration">Configuration</button>
         <button class="nav-link" data-view="devices">Devices</button>
         <button class="nav-link" data-view="logs">Activity logs</button>
+        <button class="nav-link" data-view="help">How to</button>
         <button class="nav-link admin-only" data-view="admin" hidden>Administration</button>
         <a class="nav-link nav-external admin-only" id="erpHrmLink" href="#" target="_blank" rel="noopener noreferrer" hidden>ERPNext HRM <span aria-hidden="true">↗</span></a>
       </nav>
@@ -145,6 +146,15 @@
           <label>Through<input id="correctionToDate" type="date"></label>
           <button class="button primary" id="runCorrectionRange">Correct selected range</button>
         </div>
+        <div class="offshift-repair-card admin-only">
+          <div class="repair-visual" aria-hidden="true"><svg viewBox="0 0 180 110"><rect x="8" y="12" width="164" height="86" rx="12"/><circle cx="38" cy="42" r="10"/><path d="M58 38h82M58 48h55M26 72h92"/><path class="repair-arrow" d="M124 72h28m-9-9 9 9-9 9"/></svg></div>
+          <div class="repair-copy"><p class="eyebrow">EXISTING ERPNext RECORDS</p><h3>Repair existing Off-Shift check-ins</h3><p>Roster assignments are checked first. When none exists, PulseBridge uses configured punch-time rules, creates a temporary assignment when permitted, then asks ERPNext to fetch the shift again. Real check-in times are never changed.</p></div>
+          <div class="repair-locations" id="offshiftLocations"></div>
+          <label>From<input id="offshiftFromDate" type="date"></label>
+          <label>Through<input id="offshiftToDate" type="date"></label>
+          <button class="button primary" id="repairOffshiftButton">Repair Off-Shift records</button>
+          <div class="repair-results" id="offshiftRepairResults" hidden></div>
+        </div>
         <div class="table-card pending-table-card"><table><thead><tr><th>Employee ID</th><th>Location</th><th>Assignment date</th><th>Shift</th><th>Real punch</th><th>Will issue</th></tr></thead><tbody id="pendingCorrections"></tbody></table></div>
         <div class="section-head correction-head"><div><p class="eyebrow">AUDIT</p><h3>Issued corrections</h3></div></div>
         <div class="log-panel"><pre id="correctionHistory">Loading…</pre></div>
@@ -222,6 +232,35 @@
         </div>
         <div class="log-panel"><div class="log-toolbar"><span id="logLabel">Activity</span><button class="text-button" id="refreshLogs">Refresh</button></div><pre id="logOutput">Loading…</pre></div>
       </section>
+      <section class="view" id="view-help">
+        <div class="section-head compact"><div><p class="eyebrow">PULSEBRIDGE GUIDE</p><h2>How to use PulseBridge</h2><p>A practical guide to setup, synchronization, corrections, devices, and administration.</p></div></div>
+        <div class="help-hero">
+          <div><span>01</span><strong>Biometric devices</strong></div><i></i><div><span>02</span><strong>PulseBridge</strong></div><i></i><div><span>03</span><strong>ERPNext HRM</strong></div>
+        </div>
+        <div class="help-grid">
+          <article class="help-card"><div class="help-picture"><svg viewBox="0 0 180 100"><rect x="18" y="10" width="144" height="80" rx="10"/><circle cx="49" cy="43" r="17"/><path d="M42 43l5 5 11-13M78 32h58M78 47h44M35 72h105"/></svg></div><p class="eyebrow">FIRST SETUP</p><h3>Connect ERPNext</h3><ol><li>Open <b>Configuration</b>.</li><li>Enter the ERPNext URL, API key, and secret.</li><li>Save, then choose <b>Test connection</b>.</li><li>A green ERPNext indicator confirms authentication.</li></ol></article>
+          <article class="help-card"><div class="help-picture"><svg viewBox="0 0 180 100"><rect x="25" y="12" width="52" height="76" rx="8"/><rect x="103" y="12" width="52" height="76" rx="8"/><path d="M78 38h24m-8-8 8 8-8 8M102 65H78m8-8-8 8 8 8"/><circle cx="51" cy="39" r="9"/><circle cx="129" cy="39" r="9"/></svg></div><p class="eyebrow">DEVICES</p><h3>Add or discover clocks</h3><ol><li>Open <b>Devices</b>.</li><li>Use a range such as <code>192.168.0.1-254</code>.</li><li>Scan; PulseBridge confirms ZKTeco protocol on port 4370.</li><li>Choose <b>Add device</b>, select its shift, and save.</li></ol></article>
+          <article class="help-card"><div class="help-picture"><svg viewBox="0 0 180 100"><path d="M20 75h140M34 69V48M62 69V30M90 69V42M118 69V20M146 69V36"/><path class="accent" d="M30 38l31-15 28 10 28-20 32 11"/></svg></div><p class="eyebrow">ATTENDANCE</p><h3>Run synchronization</h3><ol><li>Set From and Through dates in <b>Configuration</b>.</li><li>Use <b>Run sync now</b> for a backfill.</li><li>Use <b>Start continuous</b> for unattended operation.</li><li>Expand Device progress to inspect each location.</li></ol></article>
+          <article class="help-card"><div class="help-picture"><svg viewBox="0 0 180 100"><circle cx="52" cy="50" r="30"/><path d="M52 31v21l15 9M98 30h54M98 49h43M98 68h49"/><path class="accent" d="M40 51l8 8 18-22"/></svg></div><p class="eyebrow">CORRECTIONS</p><h3>Fix attendance safely</h3><ol><li>Single-punch correction supplies a missing IN or OUT after grace time.</li><li>Location switches control where synthetic punches are allowed.</li><li>Off-Shift repair reprocesses existing ERPNext check-ins without changing their real times.</li><li>Review unresolved rows and Activity logs afterward.</li></ol></article>
+          <article class="help-card"><div class="help-picture"><svg viewBox="0 0 180 100"><circle cx="56" cy="37" r="18"/><path d="M24 83c4-24 17-34 32-34s29 10 33 34M112 25h42M112 43h32M112 61h38"/><circle class="accent-fill" cx="145" cy="76" r="12"/><path class="white" d="M139 76l4 4 8-9"/></svg></div><p class="eyebrow">DEVICE USERS</p><h3>Match employees</h3><ol><li>Scan a biometric device from <b>Device users</b>.</li><li>Filter missing, existing, eligible, or no-fingerprint users.</li><li>Correct names on the clock when required.</li><li>Upload selected missing users as inactive ERPNext employees for HR completion.</li></ol></article>
+          <article class="help-card"><div class="help-picture"><svg viewBox="0 0 180 100"><rect x="22" y="13" width="136" height="74" rx="10"/><path d="M22 34h136M48 13v21M132 13v21M43 51h20M80 51h20M117 51h20M43 69h20M80 69h20"/></svg></div><p class="eyebrow">MAINTENANCE</p><h3>Protect the installation</h3><ol><li>Create encrypted backups under <b>Administration</b>.</li><li>Backups include configuration, credentials, branding, and users.</li><li>Use Activity logs to investigate failed records.</li><li>Update the LXC with the documented safe updater.</li></ol></article>
+        </div>
+        <div class="settings-guide"><p class="eyebrow">SETTING REFERENCE</p><h3>What each important setting does</h3><div class="table-card"><table><thead><tr><th>Setting</th><th>Purpose</th><th>Recommended use</th></tr></thead><tbody>
+          <tr><td>Pull every</td><td>Minutes between continuous synchronization cycles.</td><td>15–60 minutes depending on urgency.</td></tr>
+          <tr><td>Sync punches from / through</td><td>Limits a manual backfill to a date range.</td><td>Use short ranges first when testing.</td></tr>
+          <tr><td>Automatically detect shifts</td><td>Matches punch time against allowed shifts when no roster match works.</td><td>Enable where clock times reliably identify shifts.</td></tr>
+          <tr><td>Create temporary Shift Assignments</td><td>Creates a submitted one-day assignment when ERPNext has no roster entry.</td><td>Enable only if the API user may create and submit assignments.</td></tr>
+          <tr><td>Single-punch correction</td><td>Creates a documented missing IN or OUT after the grace period.</td><td>Disable per location where HR corrects punches manually.</td></tr>
+          <tr><td>Shift boundaries</td><td>Defines the scheduled start and end used by PulseBridge.</td><td>Keep names and times identical to ERPNext Shift Types.</td></tr>
+          <tr><td>Device default shifts</td><td>Provides a final fallback shift for each device IP or device ID.</td><td>Use only where a location follows a predictable shift.</td></tr>
+          <tr><td>Allowed shifts by device</td><td>Limits which shifts punch-time detection may choose at each location.</td><td>Include only shifts actually worked at that location.</td></tr>
+          <tr><td>IN/OUT time windows</td><td>Determines whether a real punch represents arrival or departure.</td><td>Make windows broad enough for normal early/late punches.</td></tr>
+          <tr><td>Single-punch grace</td><td>Waits after a shift before generating a missing counterpart.</td><td>Use a longer grace where devices upload late.</td></tr>
+          <tr><td>Assignment prefix</td><td>Labels one-day assignments created by PulseBridge for auditing.</td><td>Keep a recognizable value such as AUTO-SYNC.</td></tr>
+          <tr><td>Maximum shift distance</td><td>Rejects a shift guess too far from its scheduled boundary.</td><td>Use 240 minutes unless operations require more.</td></tr>
+          <tr><td>Sync device time</td><td>Sets reachable biometric clocks from the PulseBridge server clock.</td><td>Keep the LXC and Proxmox host synchronized with NTP.</td></tr>
+        </tbody></table></div></div>
+      </section>
       <section class="view" id="view-admin">
         <div class="section-head compact"><div><p class="eyebrow">OWNER CONTROL</p><h2>Administration</h2><p>Only administrators can manage access and branding.</p></div></div>
         <div class="admin-grid">
@@ -271,6 +310,6 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/static/app.js?v=20260821-1" defer></script>
+  <script src="/static/app.js?v=20260915-1" defer></script>
 </body>
 </html>
