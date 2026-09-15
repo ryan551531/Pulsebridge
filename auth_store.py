@@ -19,7 +19,7 @@ SECRET_PATH = DATA_DIR / ".session-secret"
 DEFAULT_BRANDING = {
     "app_name": "PulseBridge",
     "logo_data": "",
-    "footer_text": "Developed by Ryan Brown",
+    "footer_text": "Developed by ryan55",
     "theme_preset": "pulse",
     "theme_mode": "light",
 }
@@ -50,6 +50,10 @@ def initialize() -> None:
             value TEXT NOT NULL
         )""")
         db.executemany("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", DEFAULT_BRANDING.items())
+        db.execute(
+            "UPDATE settings SET value = ? WHERE key = 'footer_text' AND value = ?",
+            (DEFAULT_BRANDING["footer_text"], "Developed by Ryan Brown"),
+        )
     try:
         os.chmod(DB_PATH, 0o600)
     except OSError:

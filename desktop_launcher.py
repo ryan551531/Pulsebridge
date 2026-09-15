@@ -1,4 +1,4 @@
-"""PulseBridge Windows desktop entry point. Developed by Ryan Brown."""
+"""PulseBridge Windows desktop entry point. Developed by ryan55."""
 
 from __future__ import annotations
 

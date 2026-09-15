@@ -107,7 +107,7 @@ function renderBranding(values, auth) {
   const name = values.app_name || "PulseBridge";
   $("#brandName").textContent = name;
   $("#footerBrand").textContent = name;
-  $("#footerText").textContent = values.footer_text || "Developed by Ryan Brown";
+  $("#footerText").textContent = values.footer_text || "Developed by ryan55";
   document.title = `${name} · ERPNext Biometric Sync`;
   const favicon = $("#appFavicon");
   if (favicon) favicon.href = values.logo_data || "data:,";

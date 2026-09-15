@@ -36,8 +36,8 @@ app.config["JSON_SORT_KEYS"] = False
 initialize_auth()
 app.secret_key = session_secret()
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Strict")
-app.config["DEVELOPER"] = "Ryan Brown"
-DEVELOPER_NAME = "Ryan Brown"
+app.config["DEVELOPER"] = "ryan55"
+DEVELOPER_NAME = "ryan55"
 LOG_DIR = ROOT / "logs"
 SYNC_SCRIPT = ROOT / "erpnext_sync.py"
 CONTINUOUS_SYNC_MARKER = ROOT / ".continuous-sync-enabled"

@@ -1,6 +1,6 @@
 # PulseBridge — ERPNext Biometric Sync Web Dashboard
 
-Developed by Ryan Brown.
+Developed by ryan55.
 
 The Windows one-file build includes Python and all required packages. User settings and logs persist in `%LOCALAPPDATA%\PulseBridge`, allowing the EXE to be moved without losing saved configuration.
 

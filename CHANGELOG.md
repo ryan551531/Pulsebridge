@@ -4,6 +4,11 @@ All notable PulseBridge changes are recorded here.
 
 ## 2026-09-15
 
+### Changed
+
+- Updated the permanent developer credit to **Developed by ryan55** throughout
+  the application and repository documentation.
+
 ### Fixed
 
 - Continuous synchronization now resumes automatically after the PulseBridge
