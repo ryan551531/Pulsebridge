@@ -169,7 +169,7 @@ function renderDashboard(data) {
   const root = $("#overviewDevices");
   renderEmployeeSummary(data.employees);
   if (!data.devices.length) {
-    root.innerHTML = '<div class="empty">No devices configured yet. Add your first terminal to begin.</div>';
+    root.innerHTML = '<div class="empty">No devices configured yet. Add your first biometric device to begin.</div>';
     return;
   }
   root.innerHTML = data.devices.map((device) => `
@@ -354,9 +354,9 @@ function renderDiscovery(data) {
   $("#discoveryProgressBar").style.width = `${percent}%`;
   const found = (data.results || []).length;
   $("#discoveryLabel").textContent = data.state === "running"
-    ? `Checking ${scanned.toLocaleString()} of ${total.toLocaleString()} addresses · ${found} terminal${found === 1 ? "" : "s"} found`
+    ? `Checking ${scanned.toLocaleString()} of ${total.toLocaleString()} addresses · ${found} biometric device${found === 1 ? "" : "s"} found`
     : data.state === "failed" ? `Scan failed · ${data.error || "Unknown error"}`
-      : `Scan complete · ${found} terminal${found === 1 ? "" : "s"} found`;
+      : `Scan complete · ${found} biometric device${found === 1 ? "" : "s"} found`;
   const results = $("#discoveryResults");
   results.innerHTML = (data.results || []).map((result, index) => `
     <div class="discovery-result"><span class="status-dot online"></span><div><strong>${escapeHtml(result.name)}</strong><small>${escapeHtml(result.ip)} · ZKTeco port ${Number(result.port || 4370)}</small></div>

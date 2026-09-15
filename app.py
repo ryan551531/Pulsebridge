@@ -78,6 +78,34 @@ def _private_ipv4_network(value: str) -> ipaddress.IPv4Network:
     return network
 
 
+def _parse_discovery_range(value: str) -> list[ipaddress.IPv4Address]:
+    text = value.strip()
+    if "-" not in text:
+        return list(_private_ipv4_network(text).hosts())
+    start_text, end_text = (part.strip() for part in text.split("-", 1))
+    start = ipaddress.ip_address(start_text)
+    if "." not in end_text:
+        end_text = f"{start_text.rsplit('.', 1)[0]}.{end_text}"
+    end = ipaddress.ip_address(end_text)
+    if not isinstance(start, ipaddress.IPv4Address) or not isinstance(end, ipaddress.IPv4Address):
+        raise ValueError("Only IPv4 address ranges are supported.")
+    if int(end) < int(start):
+        raise ValueError("A discovery range must end after it starts.")
+    if not (_is_rfc1918_address(start) and _is_rfc1918_address(end)):
+        raise ValueError("Discovery is limited to private network ranges.")
+    return [ipaddress.IPv4Address(number) for number in range(int(start), int(end) + 1)]
+
+
+def _friendly_network_range(value: str) -> str:
+    network = ipaddress.ip_network(value)
+    hosts = list(network.hosts())
+    if not hosts:
+        return value
+    start, end = str(hosts[0]), str(hosts[-1])
+    prefix = start.rsplit(".", 1)[0]
+    return f"{start}-{end.rsplit('.', 1)[1]}" if end.startswith(f"{prefix}.") else f"{start}-{end}"
+
+
 def _suggested_device_networks() -> list[str]:
     suggestions: set[str] = set()
     for device in load_config(include_secret=False).get("devices", []):
@@ -95,7 +123,7 @@ def _suggested_device_networks() -> list[str]:
                     suggestions.add(str(ipaddress.ip_network(f"{parsed}/24", strict=False)))
         except OSError:
             pass
-    return sorted(suggestions)
+    return [_friendly_network_range(value) for value in sorted(suggestions)]
 
 
 def _probe_zkteco(address: str) -> dict[str, Any] | None:
@@ -105,7 +133,7 @@ def _probe_zkteco(address: str) -> dict[str, Any] | None:
     connection = None
     try:
         connection = ZK(address, port=4370, timeout=2, ommit_ping=True).connect()
-        name = connection.get_device_name() or "ZKTeco terminal"
+        name = connection.get_device_name() or "ZKTeco biometric device"
         return {"ip": address, "name": str(name), "port": 4370}
     except Exception:
         return None
@@ -117,8 +145,7 @@ def _probe_zkteco(address: str) -> dict[str, Any] | None:
                 pass
 
 
-def _run_device_discovery(networks: list[ipaddress.IPv4Network]) -> None:
-    addresses = [str(address) for network in networks for address in network.hosts()]
+def _run_device_discovery(addresses: list[str]) -> None:
     configured = {
         str(device.get("ip") or "").strip()
         for device in load_config(include_secret=False).get("devices", [])
@@ -1169,24 +1196,26 @@ def start_device_discovery():
     if isinstance(submitted, str):
         submitted = [item.strip() for item in submitted.split(",") if item.strip()]
     if not isinstance(submitted, list) or not submitted:
-        return _json_error("Enter at least one private network range, such as 192.168.0.0/24.")
+        return _json_error("Enter at least one private range, such as 192.168.0.1-254.")
     try:
-        networks = list(dict.fromkeys(_private_ipv4_network(str(item)) for item in submitted))
+        addresses = list(dict.fromkeys(
+            str(address) for item in submitted for address in _parse_discovery_range(str(item))
+        ))
     except ValueError as exc:
         return _json_error(str(exc))
-    total = sum(network.num_addresses if network.prefixlen >= 31 else network.num_addresses - 2 for network in networks)
+    total = len(addresses)
     if total > DEVICE_DISCOVERY_MAX_ADDRESSES:
         return _json_error(f"Discovery is limited to {DEVICE_DISCOVERY_MAX_ADDRESSES:,} addresses per scan.")
     with device_discovery_lock:
         if device_discovery["state"] == "running":
-            return _json_error("A ZKTeco discovery scan is already running.", 409)
+            return _json_error("A ZKTeco biometric-device scan is already running.", 409)
         device_discovery.update({
-            "state": "running", "networks": [str(item) for item in networks],
+            "state": "running", "networks": [str(item) for item in submitted],
             "total": total, "scanned": 0, "results": [], "error": None,
             "started_at": datetime.now().isoformat(timespec="seconds"), "completed_at": None,
         })
-    threading.Thread(target=_run_device_discovery, args=(networks,), daemon=True, name="zkteco-discovery").start()
-    return jsonify({"ok": True, "message": f"Scanning {len(networks)} private network range{'s' if len(networks) != 1 else ''} for ZKTeco terminals."}), 202
+    threading.Thread(target=_run_device_discovery, args=(addresses,), daemon=True, name="zkteco-discovery").start()
+    return jsonify({"ok": True, "message": f"Scanning the selected private address range{'s' if len(submitted) != 1 else ''} for ZKTeco biometric devices."}), 202
 
 
 @app.post("/api/devices/time-sync")
