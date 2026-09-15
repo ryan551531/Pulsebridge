@@ -40,6 +40,7 @@ app.config["DEVELOPER"] = "Ryan Brown"
 DEVELOPER_NAME = "Ryan Brown"
 LOG_DIR = ROOT / "logs"
 SYNC_SCRIPT = ROOT / "erpnext_sync.py"
+CONTINUOUS_SYNC_MARKER = ROOT / ".continuous-sync-enabled"
 AUTH_TOKEN_RE = re.compile(r"(?i)(authorization[^\n]{0,80}?token\s+)[^\s'\"]+")
 EMPLOYEE_CACHE_TTL = 300
 employee_cache: dict[str, Any] = {"expires": 0.0, "value": None}
@@ -59,6 +60,17 @@ def _hidden_subprocess_options() -> dict[str, Any]:
     startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     startupinfo.wShowWindow = subprocess.SW_HIDE
     return {"startupinfo": startupinfo, "creationflags": subprocess.CREATE_NO_WINDOW}
+
+
+def _continuous_sync_enabled() -> bool:
+    return CONTINUOUS_SYNC_MARKER.exists()
+
+
+def _save_continuous_sync_enabled(enabled: bool) -> None:
+    if enabled:
+        CONTINUOUS_SYNC_MARKER.write_text("enabled\n", encoding="utf-8")
+    elif CONTINUOUS_SYNC_MARKER.exists():
+        CONTINUOUS_SYNC_MARKER.unlink()
 
 
 class ServiceManager:
@@ -114,6 +126,8 @@ class ServiceManager:
             output.close()
             self._mode = "device" if device_ids else ("once" if once else "continuous")
             self._started_at = datetime.now().replace(microsecond=0).isoformat(sep=" ")
+            if self._mode == "continuous":
+                _save_continuous_sync_enabled(True)
             return self.status_unlocked()
 
     def status_unlocked(self) -> dict[str, Any]:
@@ -125,8 +139,10 @@ class ServiceManager:
             "started_at": self._started_at if running else None,
         }
 
-    def stop(self) -> dict[str, Any]:
+    def stop(self, disable_continuous: bool = True) -> dict[str, Any]:
         with self._lock:
+            if disable_continuous:
+                _save_continuous_sync_enabled(False)
             if self._process is None or self._process.poll() is not None:
                 self._process = None
                 self._mode = None
@@ -144,6 +160,39 @@ class ServiceManager:
 
 
 service = ServiceManager()
+
+
+class ContinuousSyncWatchdog:
+    """Resume continuous sync after application restarts or child-process failures."""
+
+    def __init__(self, interval: int = 30) -> None:
+        self._interval = interval
+        self._thread: threading.Thread | None = None
+
+    def _run(self) -> None:
+        # Give the web application a moment to finish initialization first.
+        time.sleep(2)
+        while True:
+            try:
+                current = service.status()
+                if (_continuous_sync_enabled() and not current.get("running")
+                        and (ROOT / "local_config.py").exists()):
+                    service.start(once=False)
+                    app.logger.info("Continuous sync resumed automatically.")
+            except Exception:
+                app.logger.exception("Continuous sync could not be resumed; retrying shortly.")
+            time.sleep(self._interval)
+
+    def start(self) -> None:
+        if self._thread and self._thread.is_alive():
+            return
+        self._thread = threading.Thread(target=self._run, name="continuous-sync-watchdog", daemon=True)
+        self._thread.start()
+
+
+continuous_sync_watchdog = ContinuousSyncWatchdog()
+if os.getenv("PULSEBRIDGE_DISABLE_WATCHDOG") != "1":
+    continuous_sync_watchdog.start()
 
 
 def _erpnext_health(force: bool = False) -> dict[str, Any]:
@@ -825,7 +874,7 @@ def api_admin_backup_restore():
     previous_auth = export_auth_data()
     service_before = service.status()
     if service_before.get("running"):
-        service.stop()
+        service.stop(disable_continuous=False)
     try:
         save_config(restored["configuration"])
         restore_auth_data(restored["authentication"])
@@ -1304,7 +1353,7 @@ def api_correction_settings():
         saved = save_config(config)
         restarted = False
         if service_before.get("running") and service_before.get("mode") == "continuous":
-            service.stop()
+            service.stop(disable_continuous=False)
             service.start(once=False)
             restarted = True
         return jsonify({
