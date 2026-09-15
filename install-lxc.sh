@@ -6,7 +6,13 @@ APP_DIR="/opt/${APP_NAME}"
 SERVICE_USER="pulsebridge"
 ENV_FILE="/etc/pulsebridge.env"
 SERVICE_FILE="/etc/systemd/system/pulsebridge.service"
-SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_PATH="${BASH_SOURCE[0]:-}"
+if [[ -z "${SCRIPT_PATH}" || ! -f "${SCRIPT_PATH}" ]]; then
+  echo "This installer cannot run directly from a curl pipe because it asks interactive questions."
+  echo "For an existing installation, use update-lxc.sh. For a fresh installation, use proxmox-host-install.sh."
+  exit 1
+fi
+SOURCE_DIR="$(cd -- "$(dirname -- "${SCRIPT_PATH}")" && pwd)"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run this installer as root: sudo bash install-lxc.sh"

@@ -80,3 +80,15 @@ journalctl -u pulsebridge -f
 ```
 
 Keep port `8088` limited to your trusted LAN/VPN. Do not expose it directly to the public internet.
+
+## Update an existing LXC
+
+Run this from the Proxmox host for container `118`:
+
+```bash
+pct exec 118 -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/ryan551531/Pulsebridge/main/update-lxc.sh)"
+```
+
+The updater downloads the current `main` branch, updates Python dependencies,
+repairs ownership, and restarts the service. It preserves `local_config.py`,
+accounts and branding in `data/`, logs, and the continuous-sync setting.

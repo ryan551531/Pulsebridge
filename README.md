@@ -96,6 +96,15 @@ The public repository requires
 no GitHub password or access token. Runtime credentials and local databases
 remain excluded from Git.
 
+Update an existing PulseBridge container (replace `118` if needed):
+
+```bash
+pct exec 118 -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/ryan551531/Pulsebridge/main/update-lxc.sh)"
+```
+
+This updater preserves the local configuration, accounts, branding, logs, and
+continuous-sync preference.
+
 ## Important safety notes
 
 - `local_config.py` contains the ERPNext API secret and is excluded from Git.

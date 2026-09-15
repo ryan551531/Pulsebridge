@@ -26,6 +26,11 @@ All notable PulseBridge changes are recorded here.
 - Added a watchdog that restarts the continuous sync process within 30 seconds
   if it exits unexpectedly.
 - Choosing **Stop service** still disables automatic restart intentionally.
+- Added a non-interactive LXC updater that safely preserves runtime data,
+  repairs file ownership, refreshes dependencies, and restarts PulseBridge.
+- The interactive installer now exits with clear guidance if it is incorrectly
+  invoked through a `curl` pipe, preventing script input from being consumed as
+  a dashboard password.
 
 ## 2026-08-21
 
