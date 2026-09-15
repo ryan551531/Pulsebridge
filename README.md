@@ -87,7 +87,9 @@ For a Proxmox Community Scripts-style setup, paste this into the Proxmox host:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/ryan551531/Pulsebridge/main/proxmox-host-install.sh)"
 ```
 
-It creates and configures the LXC automatically. The public repository requires
+The console wizard offers recommended defaults or advanced resource, network,
+and storage selection. It then creates and configures the LXC automatically.
+The public repository requires
 no GitHub password or access token. Runtime credentials and local databases
 remain excluded from Git.
 

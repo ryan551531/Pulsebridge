@@ -2,8 +2,10 @@
 
 ## Recommended: helper-style Proxmox installation
 
-Run `proxmox-host-install.sh` in the **Proxmox host shell**. It creates an
-unprivileged Debian 12 LXC, configures its resources and network, installs
+Run `proxmox-host-install.sh` in the **Proxmox host shell**. Its console wizard
+lets you use recommended defaults or customize resources and networking, and
+selects template and container storage from the compatible active storage on
+your Proxmox host. It creates an unprivileged Debian 12 LXC, installs
 PulseBridge, enables start-at-boot, and prints the final web address.
 
 The source repository is public, so no GitHub password or access token is
@@ -65,7 +67,9 @@ The initial browser login username is `admin`. Use the password created during i
 
 If you copied `local_config.py` separately, your current ERPNext and device settings will already be present. Otherwise, open **Configuration**, enter the ERPNext settings and devices, and save. The deployment ZIP intentionally excludes `local_config.py` so credentials are never embedded in a shareable archive.
 
-After saving, use **Start continuous** on the dashboard. The website itself starts automatically whenever the LXC boots.
+After saving the first valid ERPNext and device configuration, continuous sync
+starts automatically. Both the website and continuous sync resume whenever the
+LXC boots. Use **Stop service** when you intentionally want to disable it.
 
 ## Useful LXC commands
 

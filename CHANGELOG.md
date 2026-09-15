@@ -8,6 +8,11 @@ All notable PulseBridge changes are recorded here.
 
 - Updated the permanent developer credit to **Developed by ryan55** throughout
   the application and repository documentation.
+- Reworked the Proxmox host installer with console dialogs, recommended and
+  advanced installation modes, and selectable template/container storage
+  populated from the host's compatible active storage targets.
+- Fresh LXC installations now enable continuous synchronization by default;
+  the sync watchdog starts it automatically after configuration is saved.
 
 ### Fixed
 

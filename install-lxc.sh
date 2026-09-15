@@ -37,6 +37,9 @@ if [[ "$(realpath "${SOURCE_DIR}")" != "$(realpath "${APP_DIR}")" ]]; then
 fi
 
 install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${APP_DIR}/logs"
+# Continuous sync is desired by default. The watchdog waits until the ERPNext
+# and device configuration exists, then starts it automatically.
+touch "${APP_DIR}/.continuous-sync-enabled"
 python3 -m venv "${APP_DIR}/.venv"
 "${APP_DIR}/.venv/bin/python" -m pip install --upgrade pip
 "${APP_DIR}/.venv/bin/python" -m pip install -r "${APP_DIR}/requirements-lxc.txt"

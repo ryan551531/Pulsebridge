@@ -6,6 +6,7 @@ set -Eeuo pipefail
 APP_NAME="PulseBridge"
 TEMP_DIR=""
 GREEN='\033[1;32m'; YELLOW='\033[1;33m'; RED='\033[1;31m'; RESET='\033[0m'
+USE_WHIPTAIL=0
 
 info() { printf "${GREEN}✓${RESET} %s\n" "$*"; }
 warn() { printf "${YELLOW}!${RESET} %s\n" "$*"; }
@@ -19,6 +20,44 @@ prompt_default() {
   printf '%s' "${value:-${default}}"
 }
 
+ui_input() {
+  local title="$1" prompt="$2" default="$3" value
+  if (( USE_WHIPTAIL == 1 )); then
+    value="$(whiptail --title "${title}" --inputbox "${prompt}" 10 72 "${default}" 3>&1 1>&2 2>&3)" || die "Installation cancelled."
+  else
+    value="$(prompt_default "${prompt}" "${default}")"
+  fi
+  printf '%s' "${value:-${default}}"
+}
+
+ui_password() {
+  local prompt="$1" value
+  if (( USE_WHIPTAIL == 1 )); then
+    value="$(whiptail --title "Administrator account" --passwordbox "${prompt}" 10 72 3>&1 1>&2 2>&3)" || die "Installation cancelled."
+  else
+    read -r -s -p "${prompt}: " value; echo >&2
+  fi
+  printf '%s' "${value}"
+}
+
+select_storage() {
+  local title="$1" default="$2"; shift 2
+  local -a stores=("$@") menu=() ordered=()
+  local item
+  [[ ${#stores[@]} -gt 0 ]] || die "No compatible ${title,,} storage was found."
+  [[ " ${stores[*]} " == *" ${default} "* ]] || default="${stores[0]}"
+  ordered+=("${default}")
+  for item in "${stores[@]}"; do [[ "${item}" == "${default}" ]] || ordered+=("${item}"); done
+  if (( USE_WHIPTAIL == 0 )); then
+    prompt_default "${title}" "${default}"
+    return
+  fi
+  for item in "${ordered[@]}"; do
+    if [[ "${item}" == "${default}" ]]; then menu+=("${item}" "Recommended default"); else menu+=("${item}" "Available"); fi
+  done
+  whiptail --title "${title}" --menu "Choose storage. The recommended default is listed first." 18 74 10 "${menu[@]}" 3>&1 1>&2 2>&3 || die "Installation cancelled."
+}
+
 require_number() {
   local label="$1" value="$2" minimum="$3"
   [[ "${value}" =~ ^[0-9]+$ ]] || die "${label} must be a whole number."
@@ -30,21 +69,64 @@ for command in pct pveam pvesh pvesm; do
   command -v "${command}" >/dev/null 2>&1 || die "${command} was not found. Run this on a Proxmox VE host."
 done
 
+if [[ -t 0 && -t 1 ]]; then
+  if ! command -v whiptail >/dev/null 2>&1; then
+    apt-get update >/dev/null
+    DEBIAN_FRONTEND=noninteractive apt-get install -y whiptail >/dev/null
+  fi
+  command -v whiptail >/dev/null 2>&1 && USE_WHIPTAIL=1
+fi
+
 clear
-printf '%b\n' "${GREEN}PulseBridge · Proxmox LXC Installer${RESET}"
+printf '%b\n' "${GREEN}╔══════════════════════════════════════════════╗${RESET}"
+printf '%b\n' "${GREEN}║       PulseBridge · Proxmox Installer        ║${RESET}"
+printf '%b\n' "${GREEN}╚══════════════════════════════════════════════╝${RESET}"
 printf '%s\n\n' "Creates a private Debian LXC and installs the ERPNext biometric bridge."
+
+if (( USE_WHIPTAIL == 1 )); then
+  whiptail --title "PulseBridge" --msgbox "Welcome to the PulseBridge installer.\n\nYou can accept recommended defaults or customize storage, resources, and networking." 13 72
+fi
 
 DEFAULT_CTID="$(pvesh get /cluster/nextid 2>/dev/null || true)"
 [[ "${DEFAULT_CTID}" =~ ^[0-9]+$ ]] || DEFAULT_CTID="200"
 
-CTID="$(prompt_default "Container ID" "${DEFAULT_CTID}")"
-HOSTNAME="$(prompt_default "Hostname" "pulsebridge")"
-CORES="$(prompt_default "CPU cores" "2")"
-MEMORY="$(prompt_default "Memory in MB" "2048")"
-DISK_GB="$(prompt_default "Disk size in GB" "12")"
-BRIDGE="$(prompt_default "Network bridge" "vmbr0")"
-TEMPLATE_STORAGE="$(prompt_default "Template storage" "local")"
-ROOTFS_STORAGE="$(prompt_default "Container storage" "local-lvm")"
+CTID="$(ui_input "Container settings" "Container ID" "${DEFAULT_CTID}")"
+HOSTNAME="$(ui_input "Container settings" "Hostname" "pulsebridge")"
+
+mapfile -t TEMPLATE_STORAGES < <(pvesm status --content vztmpl 2>/dev/null | awk 'NR > 1 && $3 == "active" {print $1}')
+mapfile -t ROOTFS_STORAGES < <(pvesm status --content rootdir 2>/dev/null | awk 'NR > 1 && $3 == "active" {print $1}')
+(( ${#TEMPLATE_STORAGES[@]} > 0 )) || mapfile -t TEMPLATE_STORAGES < <(pvesm status 2>/dev/null | awk 'NR > 1 && $3 == "active" {print $1}')
+(( ${#ROOTFS_STORAGES[@]} > 0 )) || mapfile -t ROOTFS_STORAGES < <(pvesm status 2>/dev/null | awk 'NR > 1 && $3 == "active" {print $1}')
+
+DEFAULT_TEMPLATE_STORAGE="local"
+DEFAULT_ROOTFS_STORAGE="local-lvm"
+[[ " ${TEMPLATE_STORAGES[*]} " == *" ${DEFAULT_TEMPLATE_STORAGE} "* ]] || DEFAULT_TEMPLATE_STORAGE="${TEMPLATE_STORAGES[0]}"
+[[ " ${ROOTFS_STORAGES[*]} " == *" ${DEFAULT_ROOTFS_STORAGE} "* ]] || DEFAULT_ROOTFS_STORAGE="${ROOTFS_STORAGES[0]}"
+
+TEMPLATE_STORAGE="$(select_storage "Template storage" "${DEFAULT_TEMPLATE_STORAGE}" "${TEMPLATE_STORAGES[@]}")"
+ROOTFS_STORAGE="$(select_storage "Container storage" "${DEFAULT_ROOTFS_STORAGE}" "${ROOTFS_STORAGES[@]}")"
+
+ADVANCED=0
+if (( USE_WHIPTAIL == 1 )); then
+  if whiptail --title "Installation mode" --yesno "Use recommended resources?\n\n2 CPU cores · 2048 MB RAM · 12 GB disk · vmbr0 · DHCP\n\nChoose No to customize." 14 72; then ADVANCED=0; else ADVANCED=1; fi
+else
+  read -r -p "Use recommended resources and DHCP? [Y/n]: " DEFAULT_MODE
+  [[ "${DEFAULT_MODE:-Y}" =~ ^[Nn]$ ]] && ADVANCED=1
+fi
+
+CORES="2"; MEMORY="2048"; DISK_GB="12"; BRIDGE="vmbr0"; USE_DHCP="Y"
+if (( ADVANCED == 1 )); then
+  CORES="$(ui_input "Resources" "CPU cores" "2")"
+  MEMORY="$(ui_input "Resources" "Memory in MB" "2048")"
+  DISK_GB="$(ui_input "Resources" "Disk size in GB" "12")"
+  BRIDGE="$(ui_input "Network" "Network bridge" "vmbr0")"
+  if (( USE_WHIPTAIL == 1 )); then
+    if whiptail --title "Network" --yesno "Use DHCP for the LXC network?" 10 64; then USE_DHCP="Y"; else USE_DHCP="N"; fi
+  else
+    read -r -p "Use DHCP for the LXC network? [Y/n]: " USE_DHCP
+    USE_DHCP="${USE_DHCP:-Y}"
+  fi
+fi
 
 require_number "Container ID" "${CTID}" 100
 require_number "CPU cores" "${CORES}" 1
@@ -57,10 +139,9 @@ STORAGES="$(pvesm status 2>/dev/null | awk 'NR > 1 {print $1}')"
 grep -Fxq "${TEMPLATE_STORAGE}" <<<"${STORAGES}" || die "Template storage '${TEMPLATE_STORAGE}' does not exist."
 grep -Fxq "${ROOTFS_STORAGE}" <<<"${STORAGES}" || die "Container storage '${ROOTFS_STORAGE}' does not exist."
 
-read -r -p "Use DHCP for the LXC network? [Y/n]: " USE_DHCP
 if [[ "${USE_DHCP:-Y}" =~ ^[Nn]$ ]]; then
-  read -r -p "Static address with CIDR (example 192.168.0.40/24): " STATIC_IP
-  read -r -p "Gateway (example 192.168.0.1): " GATEWAY
+  STATIC_IP="$(ui_input "Static network" "Static address with CIDR" "192.168.0.40/24")"
+  GATEWAY="$(ui_input "Static network" "Gateway" "192.168.0.1")"
   [[ "${STATIC_IP}" == */* ]] || die "Enter the static address with its CIDR prefix."
   [[ -n "${GATEWAY}" ]] || die "A gateway is required."
   NET0="name=eth0,bridge=${BRIDGE},ip=${STATIC_IP},gw=${GATEWAY}"
@@ -69,11 +150,24 @@ else
 fi
 
 while true; do
-  read -r -s -p "Create the PulseBridge administrator password (12+ characters): " DASHBOARD_PASSWORD; echo
-  read -r -s -p "Confirm the administrator password: " PASSWORD_CONFIRM; echo
+  DASHBOARD_PASSWORD="$(ui_password "Create the PulseBridge administrator password (12+ characters)")"
+  PASSWORD_CONFIRM="$(ui_password "Confirm the administrator password")"
   if [[ "${#DASHBOARD_PASSWORD}" -ge 12 && "${DASHBOARD_PASSWORD}" == "${PASSWORD_CONFIRM}" && "${DASHBOARD_PASSWORD}" =~ ^[A-Za-z0-9._@%+=,:-]+$ ]]; then break; fi
   warn "Passwords must match and use 12+ characters without spaces."
 done
+
+SUMMARY="Container: ${CTID} (${HOSTNAME})
+CPU/RAM: ${CORES} cores / ${MEMORY} MB
+Disk: ${DISK_GB} GB on ${ROOTFS_STORAGE}
+Template storage: ${TEMPLATE_STORAGE}
+Network: ${BRIDGE} / $([[ "${USE_DHCP}" =~ ^[Nn]$ ]] && printf '%s' "${STATIC_IP}" || printf '%s' "DHCP")"
+if (( USE_WHIPTAIL == 1 )); then
+  whiptail --title "Ready to install" --yesno "${SUMMARY}\n\nCreate this LXC and install PulseBridge?" 18 72 || die "Installation cancelled."
+else
+  printf '\n%s\n\n' "${SUMMARY}"
+  read -r -p "Create this LXC and install PulseBridge? [Y/n]: " CONFIRM_INSTALL
+  [[ ! "${CONFIRM_INSTALL:-Y}" =~ ^[Nn]$ ]] || die "Installation cancelled."
+fi
 
 SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
 if [[ ! -f "${SOURCE_DIR}/app.py" ]]; then
